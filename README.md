@@ -284,4 +284,3 @@ This project is released under the [MIT License](LICENSE).
 # 🙏 Acknowledgements
 
 This work builds upon excellent open-source projects including [LeRobot](https://github.com/huggingface/lerobot), [gello_software](https://github.com/wuphilipp/gello_software), [openpi](https://github.com/Physical-Intelligence/openpi), and [ACT](https://github.com/tonyzhaozh/act). We thank the authors and maintainers for their contributions.
-# ur5e-lerobot

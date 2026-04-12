@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          lfs: true
+          lfs: false
 
       # NOTE(Steven): Mount to `/mnt` to avoid the limited storage on `/home`. Consider cleaning default SDKs or using self-hosted runners for more space.
       # (As of 2024-06-10, the runner's `/home` has only 6.2 GB free—8% of its 72 GB total.)

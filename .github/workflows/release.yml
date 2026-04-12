@@ -129,7 +129,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          lfs: true
+          lfs: false
           persist-credentials: false
       - name: Install apt dependencies
         run: |

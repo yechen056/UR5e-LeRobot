@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          lfs: true
+          lfs: false
           persist-credentials: false
 
       # NOTE(Steven): Mount to `/mnt` to avoid the limited storage on `/home`. Consider cleaning default SDKs or using self-hosted runners for more space.
@@ -138,7 +138,7 @@ jobs:
           git lfs install
       - uses: actions/checkout@v6
         with:
-          lfs: true
+          lfs: false
           persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3 # zizmor: ignore[unpinned-uses]

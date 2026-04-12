@@ -13,7 +13,7 @@
 We focus on an end-to-end workflow for real hardware, from teleoperation to deployment:
 
 - 🦾 **Robot Setup Support**: Single-arm and bimanual UR5e setups with PGI gripper support.
-- 🕹️ **Teleoperation Pipelines**: SpaceMouse (`spnav`), Quest 3 VR (`quest`), and `Gello` teleoperation backends.
+- 🕹️ **Teleoperation Pipelines**: SpaceMouse (`spnav`), Quest 3 VR (`quest`), and Gello(`gello`) teleoperation backends.
 - 📦 **Data-to-Policy Workflow**: Unified examples for data collection, policy training (`act`, `pi0`, `pi0.5`), and real-world evaluation.
 - 💻 **LeRobot-Native Experience**: Keep the upstream CLI workflow so teams can move quickly without heavy customization.
 

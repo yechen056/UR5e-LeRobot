@@ -116,8 +116,8 @@ from lerobot.robots import (  # noqa: F401
     openarm_follower,
     reachy2,
     so_follower,
-    ur5e_pgi,
     unitree_g1 as unitree_g1_robot,
+    ur5e_pgi,
 )
 from lerobot.robots.bi_ur5e_pgi import BiUR5ePGI  # noqa: F401
 from lerobot.robots.ur5e_pgi import UR5ePGI  # noqa: F401
@@ -140,9 +140,9 @@ from lerobot.teleoperators import (  # noqa: F401
     spnav,
     unitree_g1,
 )
+from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
 from lerobot.teleoperators.quest import QuestTeleop  # noqa: F401
 from lerobot.teleoperators.spnav import SpnavTeleop  # noqa: F401
-from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
 from lerobot.utils.constants import ACTION, OBS_STR
 from lerobot.utils.control_utils import (
     init_keyboard_listener,
@@ -691,7 +691,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             recorded_episodes = 0
             if cfg.manual_episode_control:
                 pending_episode = False
-                log_say("Manual episode mode. Press c to start, s to stop, backspace to discard.", cfg.play_sounds)
+                log_say(
+                    "Manual episode mode. Press c to start, s to stop, backspace to discard.", cfg.play_sounds
+                )
 
                 while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
                     if events["delete_last_episode"]:

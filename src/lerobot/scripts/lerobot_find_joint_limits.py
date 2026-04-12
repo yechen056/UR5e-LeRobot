@@ -44,9 +44,9 @@ import numpy as np
 from lerobot.model.kinematics import RobotKinematics
 from lerobot.robots import (  # noqa: F401
     RobotConfig,
-    bi_ur5e_pgi,
     bi_openarm_follower,
     bi_so_follower,
+    bi_ur5e_pgi,
     koch_follower,
     make_robot_from_config,
     omx_follower,

@@ -36,9 +36,9 @@ from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraCon
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    bi_ur5e_pgi,
     bi_openarm_follower,
     bi_so_follower,
+    bi_ur5e_pgi,
     hope_jr,
     koch_follower,
     lekiwi,

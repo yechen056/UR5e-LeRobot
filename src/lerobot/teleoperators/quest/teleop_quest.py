@@ -84,7 +84,9 @@ class QuestTeleop(Teleoperator):
         self._oculus_reader = None
         self._is_connected = False
         self._arm_joint_names = tuple(config.joint_names[:6])
-        self._joint_names = tuple(config.joint_names[: 6 + int(config.use_gripper and len(config.joint_names) > 6)])
+        self._joint_names = tuple(
+            config.joint_names[: 6 + int(config.use_gripper and len(config.joint_names) > 6)]
+        )
         self._arms = self._make_arm_states()
 
     @property
@@ -301,7 +303,9 @@ class QuestTeleop(Teleoperator):
 
         if len(ik_solution) == 0:
             arm.fallback_used = True
-            logger.debug("UR inverse kinematics failed for pose %s; keeping last Quest joint target.", target_tcp)
+            logger.debug(
+                "UR inverse kinematics failed for pose %s; keeping last Quest joint target.", target_tcp
+            )
             return np.asarray(hold_joint[:6], dtype=np.float64)
 
         return np.asarray(ik_solution[:6], dtype=np.float64)

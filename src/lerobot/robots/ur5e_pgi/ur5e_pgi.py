@@ -105,7 +105,7 @@ class UR5ePGI(Robot):
 
     @property
     def _tcp_features(self) -> dict[str, type]:
-        features = {name: float for name in self._tcp_action_names}
+        features = dict.fromkeys(self._tcp_action_names, float)
         if self.config.has_gripper:
             features["gripper.pos"] = float
         return features

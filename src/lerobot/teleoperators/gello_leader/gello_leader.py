@@ -156,7 +156,9 @@ class GelloLeader(Teleoperator):
     def _reset_torque_mode(self) -> None:
         self.bus.write("Torque_Enable", "gripper", TorqueMode.DISABLED.value, normalize=False)
         for motor_name in self._arm_joint_names:
-            self.bus.write("Operating_Mode", motor_name, OperatingMode.EXTENDED_POSITION.value, normalize=False)
+            self.bus.write(
+                "Operating_Mode", motor_name, OperatingMode.EXTENDED_POSITION.value, normalize=False
+            )
         self.bus.write("Operating_Mode", "gripper", OperatingMode.CURRENT_POSITION.value, normalize=False)
 
     def _read_raw_positions(self) -> np.ndarray:
@@ -206,7 +208,9 @@ class GelloLeader(Teleoperator):
             data = json.load(f)
 
         joint_offsets = data.get("joint_offsets")
-        self.joint_offsets = np.asarray(joint_offsets, dtype=np.float64) if joint_offsets is not None else None
+        self.joint_offsets = (
+            np.asarray(joint_offsets, dtype=np.float64) if joint_offsets is not None else None
+        )
         gripper_open_close = data.get("gripper_open_close_rad")
         self.gripper_open_close_rad = tuple(gripper_open_close) if gripper_open_close is not None else None
 

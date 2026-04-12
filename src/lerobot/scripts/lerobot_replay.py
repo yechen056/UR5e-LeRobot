@@ -53,9 +53,9 @@ from lerobot.processor import (
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    bi_ur5e_pgi,
     bi_openarm_follower,
     bi_so_follower,
+    bi_ur5e_pgi,
     earthrover_mini_plus,
     hope_jr,
     koch_follower,
@@ -64,8 +64,8 @@ from lerobot.robots import (  # noqa: F401
     openarm_follower,
     reachy2,
     so_follower,
-    ur5e_pgi,
     unitree_g1,
+    ur5e_pgi,
 )
 from lerobot.utils.constants import ACTION
 from lerobot.utils.import_utils import register_third_party_plugins

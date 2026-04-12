@@ -86,8 +86,8 @@ from lerobot.robots import (  # noqa: F401
     openarm_follower,
     reachy2,
     so_follower,
-    ur5e_pgi,
     unitree_g1 as unitree_g1_robot,
+    ur5e_pgi,
 )
 from lerobot.robots.bi_ur5e_pgi import BiUR5ePGI  # noqa: F401
 from lerobot.robots.ur5e_pgi import UR5ePGI, UR5ePGIConfig  # noqa: F401

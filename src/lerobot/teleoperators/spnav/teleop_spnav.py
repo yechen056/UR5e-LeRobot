@@ -57,12 +57,14 @@ class SpnavTeleop(Teleoperator):
         )
 
         self._arm_joint_names = tuple(config.joint_names[:6])
-        self._joint_names = tuple(config.joint_names[: 6 + int(self.config.use_gripper and len(config.joint_names) > 6)])
+        self._joint_names = tuple(
+            config.joint_names[: 6 + int(self.config.use_gripper and len(config.joint_names) > 6)]
+        )
 
     @property
     def action_features(self) -> dict[str, type]:
         if self.config.action_mode == "eef":
-            features = {name: float for name in self._tcp_action_names}
+            features = dict.fromkeys(self._tcp_action_names, float)
             if self.config.use_gripper and len(self._joint_names) == 7:
                 features["gripper.pos"] = float
             return features
@@ -146,7 +148,9 @@ class SpnavTeleop(Teleoperator):
         self._update_gripper_target()
 
         if self.config.action_mode == "eef":
-            action = {name: float(value) for name, value in zip(self._tcp_action_names, target_pose, strict=True)}
+            action = {
+                name: float(value) for name, value in zip(self._tcp_action_names, target_pose, strict=True)
+            }
             if self.config.use_gripper and len(self._joint_names) == 7:
                 action["gripper.pos"] = self._gripper_target
             return action
@@ -163,7 +167,9 @@ class SpnavTeleop(Teleoperator):
             ik_solution = self._rtde_control.getInverseKinematics(target_pose.tolist())
 
         if len(ik_solution) == 0:
-            logger.debug("UR inverse kinematics failed for pose %s; keeping current joints.", target_pose.tolist())
+            logger.debug(
+                "UR inverse kinematics failed for pose %s; keeping current joints.", target_pose.tolist()
+            )
             ik_solution = current_joints.tolist()
 
         action = {

@@ -11,15 +11,16 @@
 **ur5e-lerobot (UR5e + PGI)** is a practical real-world robotics extension focused on lowering the barrier to data-driven robot learning with **LeRobot**.
 
 We focus on an end-to-end workflow for real hardware, from teleoperation to deployment:
+
 - 🦾 **Robot Setup Support**: Single-arm and bimanual UR5e setups with PGI gripper support.
 - 🕹️ **Teleoperation Pipelines**: SpaceMouse (`spnav`), Quest VR (`quest`), and `gello` teleoperation backends.
 - 📦 **Data-to-Policy Workflow**: Unified examples for data collection, policy training (`act`, `pi0`, `pi0.5`), and real-world evaluation.
 - 💻 **LeRobot-Native Experience**: Keep the upstream CLI workflow so teams can move quickly without heavy customization.
 
-| Category | Supported Options |
-| --- | --- |
-| Hardware | `UR5e`, `PGI` |
-| Robot types | `ur5e_pgi`, `bi_ur5e_pgi` |
+| Category               | Supported Options         |
+| ---------------------- | ------------------------- |
+| Hardware               | `UR5e`, `PGI`             |
+| Robot types            | `ur5e_pgi`, `bi_ur5e_pgi` |
 | Teleoperation backends | `spnav`, `quest`, `gello` |
 
 > [!IMPORTANT]
@@ -27,10 +28,12 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 > If not specified, default is `joint` (`joint-space`).
 >
 > Data collection:
+>
 > - `--robot.action_mode=joint --teleop.action_mode=joint`
 > - `--robot.action_mode=eef --teleop.action_mode=eef`
 >
 > Evaluation:
+>
 > - joint-space policy -> `--robot.action_mode=joint`
 > - eef-space policy -> `--robot.action_mode=eef`
 
@@ -40,7 +43,6 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 > We will continue to publish tested training commands and recommended hyperparameters for additional policies in future updates.
 
 # 🛠️ Installation
-
 
 ```bash
 conda create -y -n lerobot python=3.12
@@ -133,10 +135,11 @@ lerobot-record \
   --dataset.fps=20 \
   --dataset.push_to_hub=false \
   --manual_episode_control=true \
-  --display_data=true 
+  --display_data=true
 ```
 
 `--manual_episode_control=true` keyboard controls:
+
 - `C`: start recording current episode
 - `S`: stop recording current episode
 - `Backspace`: delete the previous episode
@@ -146,7 +149,7 @@ lerobot-record \
 
 For training, please refer to the official LeRobot training guides for more details and advanced parameters.
 
-- `Train ACT Policy` 
+- `Train ACT Policy`
 
 ```bash
 lerobot-train \
@@ -166,7 +169,7 @@ lerobot-train \
   --save_freq=10000
 ```
 
-- `Train Pi0 Policy`  
+- `Train Pi0 Policy`
   Required base model: `pi_models/pi0-base` (download from [pi0_base](https://huggingface.co/lerobot/pi05_base/tree/main)).
 
 ```bash
@@ -189,9 +192,8 @@ lerobot-train \
   --peft.r=64
 ```
 
-- `Train Pi05 Policy`  
+- `Train Pi05 Policy`
   Required base model: `pi_models/pi0.5-base` (download from [pi05_base](https://huggingface.co/lerobot/pi05_base/tree/main)).
-
 
 ```bash
 lerobot-train \
@@ -216,7 +218,6 @@ lerobot-train \
 # 🤖 Evaluation
 
 To evaluate trained checkpoints on the real robot, you can use `lerobot-record` with `--policy.path` for inference.
-
 
 - `Run ACT`
 

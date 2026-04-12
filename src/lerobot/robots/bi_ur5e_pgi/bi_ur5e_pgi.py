@@ -85,7 +85,10 @@ class BiUR5ePGI(Robot):
 
         self.left_arm = UR5ePGI(left_arm_config)
         self.right_arm = UR5ePGI(right_arm_config)
-        self.cameras = {**{f"left_{k}": v for k, v in self.left_arm.cameras.items()}, **{f"right_{k}": v for k, v in self.right_arm.cameras.items()}}
+        self.cameras = {
+            **{f"left_{k}": v for k, v in self.left_arm.cameras.items()},
+            **{f"right_{k}": v for k, v in self.right_arm.cameras.items()},
+        }
 
     @property
     def _motor_features(self) -> dict[str, type]:
@@ -149,7 +152,9 @@ class BiUR5ePGI(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
-        left_action = {key.removeprefix("left_"): value for key, value in action.items() if key.startswith("left_")}
+        left_action = {
+            key.removeprefix("left_"): value for key, value in action.items() if key.startswith("left_")
+        }
         right_action = {
             key.removeprefix("right_"): value for key, value in action.items() if key.startswith("right_")
         }

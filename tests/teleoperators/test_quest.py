@@ -44,10 +44,10 @@ class _FakeReceive:
             else np.asarray(joints, dtype=np.float64)
         )
 
-    def getActualTCPPose(self):
+    def getActualTCPPose(self):  # noqa: N802
         return self.tcp.tolist()
 
-    def getActualQ(self):
+    def getActualQ(self):  # noqa: N802
         return self.joints.tolist()
 
 
@@ -56,7 +56,7 @@ class _FakeControl:
         self.solutions = list(solutions)
         self.requests = []
 
-    def getInverseKinematics(self, target_tcp, *args):
+    def getInverseKinematics(self, target_tcp, *args):  # noqa: N802
         self.requests.append((target_tcp, args))
         if len(self.solutions) == 1:
             return self.solutions[0]

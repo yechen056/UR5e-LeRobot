@@ -118,8 +118,6 @@ class SpnavTeleop(Teleoperator):
         assert self._rtde_receive is not None
 
         self._drain_events()
-        close_pressed = self._button_state.get(self.config.close_gripper_button, False)
-        open_pressed = self._button_state.get(self.config.open_gripper_button, False)
 
         current_pose = np.asarray(self._rtde_receive.getActualTCPPose(), dtype=np.float64)
         current_joints = np.asarray(self._rtde_receive.getActualQ(), dtype=np.float64)

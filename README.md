@@ -17,11 +17,11 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 - 📦 **Data-to-Policy Workflow**: Unified examples for data collection, policy training (`act`, `pi0`, `pi0.5`), and real-world evaluation.
 - 💻 **LeRobot-Native Experience**: Keep the upstream CLI workflow so teams can move quickly without heavy customization.
 
-| Category               | Supported Options         |
-| ---------------------- | ------------------------- |
-| Hardware               | `ur5e`, `pgi gripper`             |
-| Robot types            | `ur5e`, `bimanual_ur5e` |
-| Teleoperation backends | `spacemouse`, `vr quest 3`, gello` |
+| Category | Supported Options |
+|---|---|
+| Hardware | `UR5e`, `PGI gripper`, `Intel camera` |
+| Robot types | `ur5e_pgi`, `bi_ur5e_pgi` |
+| Teleoperation backends | `SpaceMouse`, `Quest 3 (VR)`, `Gello` |
 
 > [!IMPORTANT]
 > Keep `action_mode` consistent across data collection and evaluation (`joint` or `eef`).

@@ -48,11 +48,12 @@ conda activate lerobot
 conda install -y ffmpeg -c conda-forge
 
 cd ur5e-lerobot
+git submodule update --init --recursive
 pip install -e .
 
 pip install -e ".[pi,peft]"
 pip install ur-rtde==1.6.3 pymodbus==2.1.0 spnav==0.9
-pip install -e /ur5e-lerobot/third_party/oculus_reader
+pip install -e third_party/oculus_reader
 ```
 
 ## Verify The Installation

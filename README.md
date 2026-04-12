@@ -19,9 +19,9 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 
 | Category               | Supported Options         |
 | ---------------------- | ------------------------- |
-| Hardware               | `UR5e`, `PGI`             |
-| Robot types            | `ur5e_pgi`, `bi_ur5e_pgi` |
-| Teleoperation backends | `spnav`, `quest`, `gello` |
+| Hardware               | `ur5e`, `pgi gripper`             |
+| Robot types            | `ur5e`, `bimanual_ur5e` |
+| Teleoperation backends | `spacemouse`, `vr quest 3`, gello` |
 
 > [!IMPORTANT]
 > Keep `action_mode` consistent across data collection and evaluation (`joint` or `eef`).

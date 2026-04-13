@@ -140,7 +140,7 @@ from lerobot.teleoperators import (  # noqa: F401
     spnav,
     unitree_g1,
 )
-from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
+from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop, KeyboardUR5eTeleop
 from lerobot.teleoperators.quest import QuestTeleop  # noqa: F401
 from lerobot.teleoperators.spnav import SpnavTeleop  # noqa: F401
 from lerobot.utils.constants import ACTION, OBS_STR
@@ -163,6 +163,55 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 UR5E_PGI_HOME_TCP_POSE = (-0.11130, -0.48927, 0.22326, 3.152, -0.007, -0.001)
 GREEN_BOLD = "\033[1;92m"
 RESET_COLOR = "\033[0m"
+
+
+def _get_keyboard_ur5e_record_action_features(robot: UR5ePGI, teleop: KeyboardUR5eTeleop) -> dict[str, type]:
+    return robot.get_action_features_for_mode(teleop.config.record_action_mode)
+
+
+def _bridge_keyboard_ur5e_record_action(
+    robot: UR5ePGI, teleop: KeyboardUR5eTeleop, raw_action: RobotAction, obs: RobotObservation
+) -> tuple[RobotAction, RobotAction]:
+    current_tcp = robot.get_tcp_pose().copy()
+    target_tcp = current_tcp.copy()
+    target_tcp[0] += float(raw_action.get("delta_x", 0.0))
+    target_tcp[1] += float(raw_action.get("delta_y", 0.0))
+    target_tcp[2] += float(raw_action.get("delta_z", 0.0))
+
+    gripper_target = float(obs.get("gripper.pos", 1.0))
+    if robot.config.has_gripper:
+        gripper_target = min(max(gripper_target + float(raw_action.get("gripper_delta", 0.0)), 0.0), 1.0)
+
+    eef_action: RobotAction = {
+        "tcp.x": float(target_tcp[0]),
+        "tcp.y": float(target_tcp[1]),
+        "tcp.z": float(target_tcp[2]),
+        "tcp.rx": float(target_tcp[3]),
+        "tcp.ry": float(target_tcp[4]),
+        "tcp.rz": float(target_tcp[5]),
+    }
+    if robot.config.has_gripper:
+        eef_action["gripper.pos"] = gripper_target
+
+    if teleop.config.record_action_mode == "eef":
+        return eef_action, eef_action
+
+    joint_action, ik_success = robot.compute_joint_action_from_tcp_pose(target_tcp, gripper_target=gripper_target)
+    if not ik_success:
+        hold_tcp = current_tcp.copy()
+        hold_action: RobotAction = {
+            "tcp.x": float(hold_tcp[0]),
+            "tcp.y": float(hold_tcp[1]),
+            "tcp.z": float(hold_tcp[2]),
+            "tcp.rx": float(hold_tcp[3]),
+            "tcp.ry": float(hold_tcp[4]),
+            "tcp.rz": float(hold_tcp[5]),
+        }
+        if robot.config.has_gripper:
+            hold_action["gripper.pos"] = gripper_target
+        return joint_action, hold_action
+
+    return joint_action, eef_action
 
 
 def _print_episode_banner(current_episode_number: int, target_episode_number: int) -> None:
@@ -463,10 +512,13 @@ def record_loop(
             if robot.name == "unitree_g1":
                 teleop.send_feedback(obs)
 
-            # Applies a pipeline to the raw teleop action, default is IdentityProcessor
-            act_processed_teleop = teleop_action_processor((act, obs))
-            action_values = act_processed_teleop
-            robot_action_to_send = robot_action_processor((act_processed_teleop, obs))
+            if isinstance(robot, UR5ePGI) and isinstance(teleop, KeyboardUR5eTeleop):
+                action_values, robot_action_to_send = _bridge_keyboard_ur5e_record_action(robot, teleop, act, obs)
+            else:
+                # Applies a pipeline to the raw teleop action, default is IdentityProcessor
+                act_processed_teleop = teleop_action_processor((act, obs))
+                action_values = act_processed_teleop
+                robot_action_to_send = robot_action_processor((act_processed_teleop, obs))
 
         elif policy is None and isinstance(teleop, list):
             arm_action = teleop_arm.get_action()
@@ -531,7 +583,12 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     robot = make_robot_from_config(cfg.robot)
     teleop = make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
-    if isinstance(robot, UR5ePGI) and isinstance(teleop, (SpnavTeleop, QuestTeleop)):
+    if isinstance(robot, UR5ePGI) and isinstance(teleop, KeyboardUR5eTeleop):
+        if robot.config.action_mode != "eef":
+            raise ValueError(
+                "Keyboard UR5e recording executes in EEF mode. Use `--robot.action_mode=eef`."
+            )
+    elif isinstance(robot, UR5ePGI) and isinstance(teleop, (SpnavTeleop, QuestTeleop)):
         if robot.config.action_mode != teleop.config.action_mode:
             raise ValueError(
                 f"UR5e PGI and {teleop.name} action modes must match when recording with teleop "
@@ -549,11 +606,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
 
+    record_action_features = robot.action_features
+    if isinstance(robot, UR5ePGI) and isinstance(teleop, KeyboardUR5eTeleop):
+        record_action_features = _get_keyboard_ur5e_record_action_features(robot, teleop)
+
     dataset_features = combine_feature_dicts(
         aggregate_pipeline_dataset_features(
             pipeline=teleop_action_processor,
             initial_features=create_initial_features(
-                action=robot.action_features
+                action=record_action_features
             ),  # TODO(steven, pepijn): in future this should be come from teleop or policy
             use_videos=cfg.dataset.video,
         ),
@@ -678,7 +739,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     robot.right_arm._gripper.set_position(1000)
                 logging.info("Opened the PGI gripper for recording startup.")
 
-        listener, events = init_keyboard_listener()
+        disable_arrow_hotkeys = isinstance(robot, UR5ePGI) and isinstance(teleop, KeyboardUR5eTeleop)
+        listener, events = init_keyboard_listener(disable_arrow_hotkeys=disable_arrow_hotkeys)
 
         if not cfg.dataset.streaming_encoding:
             logging.info(

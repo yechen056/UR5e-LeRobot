@@ -127,6 +127,14 @@ class UR5ePGI(Robot):
             return self._tcp_features
         return self._motor_features
 
+
+    def get_action_features_for_mode(self, action_mode: str) -> dict[str, type]:
+        if action_mode == "eef":
+            return self._tcp_features
+        if action_mode == "joint":
+            return self._motor_features
+        raise ValueError(f"Unsupported UR5e action mode: {action_mode}")
+
     @property
     def is_connected(self) -> bool:
         cameras_connected = all(camera.is_connected for camera in self.cameras.values())
@@ -290,6 +298,54 @@ class UR5ePGI(Robot):
             self._rtde_receive = None
         self._is_connected = False
         self._owns_rtde_session = True
+
+
+    @check_if_not_connected
+    def get_tcp_pose(self) -> np.ndarray:
+        assert self._rtde_receive is not None
+        return np.asarray(self._rtde_receive.getActualTCPPose(), dtype=np.float64)
+
+    @check_if_not_connected
+    def compute_joint_action_from_tcp_pose(
+        self,
+        tcp_pose: list[float] | tuple[float, float, float, float, float, float] | np.ndarray,
+        gripper_target: float | None = None,
+    ) -> tuple[RobotAction, bool]:
+        assert self._rtde_control is not None
+        assert self._rtde_receive is not None
+
+        target_tcp = np.asarray(tcp_pose, dtype=np.float64)
+        current_joints = np.asarray(self._rtde_receive.getActualQ(), dtype=np.float64)
+        ik_solution = self._rtde_control.getInverseKinematics(
+            target_tcp.tolist(),
+            current_joints.tolist(),
+            self.config.lookahead_time,
+            self.config.velocity,
+        )
+
+        if ik_solution is None:
+            logger.warning("UR inverse kinematics failed for pose %s; keeping current joint target.", target_tcp)
+            action = {
+                f"{joint_name}.pos": float(value)
+                for joint_name, value in zip(self._arm_joint_names, current_joints, strict=True)
+            }
+            success = False
+        else:
+            action = {
+                f"{joint_name}.pos": float(value)
+                for joint_name, value in zip(
+                    self._arm_joint_names,
+                    np.asarray(ik_solution[:6], dtype=np.float64),
+                    strict=True,
+                )
+            }
+            success = True
+
+        if self.config.has_gripper:
+            if gripper_target is None:
+                gripper_target = self._read_gripper_position()
+            action["gripper.pos"] = min(max(float(gripper_target), 0.0), 1.0)
+        return action, success
 
     @check_if_not_connected
     def move_to_tcp_pose(

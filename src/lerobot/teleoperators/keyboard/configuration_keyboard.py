@@ -42,6 +42,25 @@ class KeyboardEndEffectorTeleopConfig(KeyboardTeleopConfig):
     use_gripper: bool = True
 
 
+@TeleoperatorConfig.register_subclass("keyboard_ur5e")
+@dataclass
+class KeyboardUR5eTeleopConfig(KeyboardTeleopConfig):
+    """Configuration for single-arm UR5e keyboard teleoperation."""
+
+    record_action_mode: str = "joint"
+    translation_step: float = 0.02
+    gripper_step: float = 0.6
+    use_gripper: bool = True
+
+    def __post_init__(self):
+        if self.record_action_mode not in ("joint", "eef"):
+            raise ValueError("`record_action_mode` must be either 'joint' or 'eef'.")
+        if self.translation_step <= 0:
+            raise ValueError("`translation_step` must be positive.")
+        if self.gripper_step <= 0:
+            raise ValueError("`gripper_step` must be positive.")
+
+
 @TeleoperatorConfig.register_subclass("keyboard_rover")
 @dataclass
 class KeyboardRoverTeleopConfig(TeleoperatorConfig):

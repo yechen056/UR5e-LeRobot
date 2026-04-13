@@ -112,6 +112,7 @@ from lerobot.teleoperators import (  # noqa: F401
     spnav,
     unitree_g1,
 )
+from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardUR5eTeleop
 from lerobot.teleoperators.quest import QuestTeleop, QuestTeleopConfig  # noqa: F401
 from lerobot.teleoperators.spnav import SpnavTeleop, SpnavTeleopConfig  # noqa: F401
 from lerobot.utils.import_utils import register_third_party_plugins
@@ -121,6 +122,31 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 logger = logging.getLogger(__name__)
 UR5E_PGI_HOME_TCP_POSE = (-0.11130, -0.48927, 0.22326, 3.152, -0.007, -0.001)
+
+
+def _bridge_keyboard_ur5e_action(robot: UR5ePGI, raw_action: RobotAction, obs: RobotObservation) -> tuple[RobotAction, RobotAction]:
+    current_tcp = robot.get_tcp_pose().copy()
+    target_tcp = current_tcp.copy()
+    target_tcp[0] += float(raw_action.get("delta_x", 0.0))
+    target_tcp[1] += float(raw_action.get("delta_y", 0.0))
+    target_tcp[2] += float(raw_action.get("delta_z", 0.0))
+
+    gripper_target = float(obs.get("gripper.pos", 1.0))
+    if robot.config.has_gripper:
+        gripper_target = min(max(gripper_target + float(raw_action.get("gripper_delta", 0.0)), 0.0), 1.0)
+
+    eef_action: RobotAction = {
+        "tcp.x": float(target_tcp[0]),
+        "tcp.y": float(target_tcp[1]),
+        "tcp.z": float(target_tcp[2]),
+        "tcp.rx": float(target_tcp[3]),
+        "tcp.ry": float(target_tcp[4]),
+        "tcp.rz": float(target_tcp[5]),
+    }
+    if robot.config.has_gripper:
+        eef_action["gripper.pos"] = gripper_target
+
+    return raw_action, eef_action
 
 
 class _TerminalKeyReader:
@@ -236,10 +262,13 @@ def teleop_loop(
             action_dt = time.perf_counter() - action_start
 
             # Process teleop action through pipeline
-            teleop_action = teleop_action_processor((raw_action, obs))
+            if isinstance(robot, UR5ePGI) and isinstance(teleop, KeyboardUR5eTeleop):
+                teleop_action, robot_action_to_send = _bridge_keyboard_ur5e_action(robot, raw_action, obs)
+            else:
+                teleop_action = teleop_action_processor((raw_action, obs))
 
-            # Process action for robot through pipeline
-            robot_action_to_send = robot_action_processor((teleop_action, obs))
+                # Process action for robot through pipeline
+                robot_action_to_send = robot_action_processor((teleop_action, obs))
 
             # Send processed action to robot (robot_action_processor.to_output should return RobotAction)
             send_start = time.perf_counter()
@@ -315,7 +344,12 @@ def teleoperate(cfg: TeleoperateConfig):
 
     teleop.connect()
 
-    if (
+    if isinstance(robot, UR5ePGI) and isinstance(teleop, KeyboardUR5eTeleop):
+        if robot.config.action_mode != "eef":
+            raise ValueError(
+                "Keyboard UR5e teleoperation executes in EEF mode. Use `--robot.action_mode=eef`."
+            )
+    elif (
         isinstance(teleop, SpnavTeleop)
         and isinstance(robot, UR5ePGI)
         and teleop.config.robot_ip == robot.config.robot_ip

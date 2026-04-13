@@ -116,7 +116,7 @@ def predict_action(
     return action
 
 
-def init_keyboard_listener():
+def init_keyboard_listener(disable_arrow_hotkeys: bool = False):
     """
     Initializes a non-blocking keyboard listener for real-time user interaction.
 
@@ -154,9 +154,13 @@ def init_keyboard_listener():
     def on_press(key):
         try:
             if key == keyboard.Key.right:
+                if disable_arrow_hotkeys:
+                    return
                 print("Right arrow key pressed. Exiting loop...")
                 events["exit_early"] = True
             elif key == keyboard.Key.left:
+                if disable_arrow_hotkeys:
+                    return
                 print("Left arrow key pressed. Exiting loop and rerecord the last episode...")
                 events["rerecord_episode"] = True
                 events["exit_early"] = True

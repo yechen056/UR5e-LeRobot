@@ -30,6 +30,7 @@ from .configuration_keyboard import (
     KeyboardEndEffectorTeleopConfig,
     KeyboardRoverTeleopConfig,
     KeyboardTeleopConfig,
+    KeyboardUR5eTeleopConfig,
 )
 
 PYNPUT_AVAILABLE = True
@@ -279,6 +280,93 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
             TeleopEvents.SUCCESS: success,
             TeleopEvents.RERECORD_EPISODE: rerecord_episode,
         }
+
+
+class KeyboardUR5eTeleop(KeyboardTeleop):
+    """Keyboard teleoperator for single-arm UR5e EEF incremental control."""
+
+    config_class = KeyboardUR5eTeleopConfig
+    name = "keyboard_ur5e"
+
+    def __init__(self, config: KeyboardUR5eTeleopConfig):
+        super().__init__(config)
+        self.config = config
+
+    @property
+    def action_features(self) -> dict:
+        names = {"delta_x": 0, "delta_y": 1, "delta_z": 2}
+        shape = 3
+        if self.config.use_gripper:
+            names["gripper_delta"] = 3
+            shape = 4
+        return {"dtype": "float32", "shape": (shape,), "names": names}
+
+    @check_if_already_connected
+    def connect(self) -> None:
+        if not PYNPUT_AVAILABLE or keyboard is None:
+            raise RuntimeError(
+                "Keyboard UR5e teleoperation requires `pynput` and an active local keyboard/display session."
+            )
+
+        self.listener = keyboard.Listener(
+            on_press=self._on_press_special,
+            on_release=self._on_release_special,
+        )
+        self.listener.start()
+
+    def _on_press_special(self, key):
+        self.event_queue.put((key, True))
+
+    def _on_release_special(self, key):
+        self.event_queue.put((key, False))
+        if key == keyboard.Key.esc:
+            logging.info("ESC pressed, disconnecting.")
+            self.disconnect()
+
+    def _drain_pressed_keys(self):
+        while not self.event_queue.empty():
+            key_obj, is_pressed = self.event_queue.get_nowait()
+            self.current_pressed[key_obj] = is_pressed
+
+        self.current_pressed = {key: val for key, val in self.current_pressed.items() if val}
+
+    @check_if_not_connected
+    def get_action(self) -> RobotAction:
+        self._drain_pressed_keys()
+
+        delta_x = 0.0
+        delta_y = 0.0
+        delta_z = 0.0
+        gripper_delta = 0.0
+        step = float(self.config.translation_step)
+
+        if self.current_pressed.get(keyboard.Key.left, False):
+            delta_x += step
+        if self.current_pressed.get(keyboard.Key.right, False):
+            delta_x -= step
+        if self.current_pressed.get(keyboard.Key.up, False):
+            delta_y -= step
+        if self.current_pressed.get(keyboard.Key.down, False):
+            delta_y += step
+        if self.current_pressed.get(keyboard.Key.shift, False):
+            delta_z -= step
+        if self.current_pressed.get(keyboard.Key.shift_r, False):
+            delta_z += step
+
+        if self.config.use_gripper:
+            if self.current_pressed.get(keyboard.Key.ctrl_l, False) or self.current_pressed.get(keyboard.Key.ctrl, False):
+                gripper_delta -= float(self.config.gripper_step)
+            if self.current_pressed.get(keyboard.Key.ctrl_r, False):
+                gripper_delta += float(self.config.gripper_step)
+
+        action = {
+            "delta_x": delta_x,
+            "delta_y": delta_y,
+            "delta_z": delta_z,
+        }
+        if self.config.use_gripper:
+            action["gripper_delta"] = gripper_delta
+        return action
 
 
 class KeyboardRoverTeleop(KeyboardTeleop):

@@ -1,5 +1,5 @@
 <div align="center">
-  <h1 align="center"> LeRobot for UR5e </h1>
+  <h1 align="center"> UR5e-Lerobot </h1>
 </div>
 
 <p align="center">
@@ -8,12 +8,12 @@
 
 # 📖 Introduction
 
-**ur5e-lerobot (UR5e + PGI)** is a practical real-world robotics extension focused on lowering the barrier to data-driven robot learning with **LeRobot**.
+**UR5e-Lerobot (UR5e + PGI)** is a practical real-world robotics extension focused on lowering the barrier to data-driven robot learning with **LeRobot**.
 
 We focus on an end-to-end workflow for real hardware, from teleoperation to deployment:
 
 - 🦾 **Robot Setup Support**: Single-arm and bimanual UR5e setups with PGI gripper support.
-- 🕹️ **Teleoperation Pipelines**: SpaceMouse (`spnav`), Quest 3 VR (`quest`), and Gello(`gello`) teleoperation backends.
+- 🕹️ **Teleoperation Pipelines**: SpaceMouse (`spnav`), Quest 3 VR (`quest`), Gello(`gello`), and Keyboard (`keyboard_ur5e`) for UR5e.
 - 📦 **Data-to-Policy Workflow**: Unified examples for data collection, policy training (`act`, `pi0`, `pi0.5`), and real-world evaluation.
 - 💻 **LeRobot-Native Experience**: Keep the upstream CLI workflow so teams can move quickly without heavy customization.
 
@@ -21,7 +21,7 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 |---|---|
 | Hardware | `UR5e`, `PGI gripper`, `Intel camera` |
 | Robot types | `ur5e_pgi`, `bi_ur5e_pgi` |
-| Teleoperation backends | `SpaceMouse`, `Quest 3 (VR)`, `Gello` |
+| Teleoperation backends | `SpaceMouse`, `Quest 3 (VR)`, `Gello`, `Keyboard` |
 
 > [!IMPORTANT]
 > Keep `action_mode` consistent across data collection and evaluation (`joint` or `eef`).
@@ -41,6 +41,11 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 > We have validated and tuned hyperparameters on this hardware stack for three policies: `ACT`, `pi0`, and `pi0.5`.
 > This does **not** mean other policies (for example `diffusion` and `smolvla`) are unsupported.
 > We will continue to publish tested training commands and recommended hyperparameters for additional policies in future updates.
+
+## 📢 Update
+
+- **2026/04/13**, Added keyboard teleoperation support and a keyboard-based data collection branch.
+- **2026/04/12**, Officially released the **UR5e-Lerobot** project.
 
 # 🛠️ Installation
 
@@ -82,6 +87,21 @@ lerobot-teleoperate \
   --fps=60
 ```
 
+## Single-Arm Keyboard
+
+```bash
+lerobot-teleoperate \
+  --robot.type=ur5e_pgi \
+  --robot.action_mode=eef \
+  --robot.robot_ip=192.168.1.5 \
+  --robot.gripper_ip=192.168.1.7 \
+  --robot.gripper_port=8887 \
+  --teleop.type=keyboard_ur5e \
+  --fps=30
+```
+
+Keyboard mapping: `↑/↓` move along X, `←/→` move along Y, `left shift` / `right shift` move along Z, and `ctrl_l` / `ctrl_r` close/open the gripper.
+
 ## Single-Arm Quest / VR
 
 ```bash
@@ -116,6 +136,27 @@ lerobot-teleoperate \
 # ⚙️ Data Collection
 
 Use `lerobot-record` to collect demonstrations using teleoperation together with front and wrist camera streams.
+
+## Single-Arm Keyboard Recording
+
+```bash
+lerobot-record \
+  --robot.type=ur5e_pgi \
+  --robot.action_mode=eef \
+  --robot.robot_ip=192.168.1.5 \
+  --robot.gripper_ip=192.168.1.7 \
+  --robot.gripper_port=8887 \
+  --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}, wrist: {type: opencv, index_or_path: 10, width: 640, height: 480, fps: 30} }" \
+  --teleop.type=keyboard_ur5e \
+  --dataset.repo_id=yechen/ur5e_pgi_keyboard \
+  --dataset.root=/home/yechen/ur5e-lerobot/data/ur5e_pgi_keyboard \
+  --dataset.single_task="pick up the target object and place it in the target area" \
+  --dataset.num_episodes=30 \
+  --dataset.fps=20 \
+  --dataset.push_to_hub=false \
+  --manual_episode_control=true \
+  --display_data=true
+```
 
 ## Single-Arm VR Recording
 

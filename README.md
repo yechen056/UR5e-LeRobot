@@ -8,7 +8,7 @@
 
 # 📖 Introduction
 
-**UR5e-Lerobot (UR5e + PGI)** is a practical real-world robotics extension focused on lowering the barrier to data-driven robot learning with **LeRobot**.
+**UR5e-LeRobot (UR5e + PGI)** is a practical real-world robotics extension focused on lowering the barrier to data-driven robot learning with **LeRobot**.
 
 We focus on an end-to-end workflow for real hardware, from teleoperation to deployment:
 

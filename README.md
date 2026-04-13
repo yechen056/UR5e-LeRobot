@@ -45,7 +45,7 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 ## 📢 Update
 
 - **2026/04/13**, Added keyboard teleoperation support and a keyboard-based data collection branch.
-- **2026/04/12**, Officially released the **UR5e-Lerobot** project.
+- **2026/04/12**, Officially released the **UR5e-LeRobot** project.
 
 # 🛠️ Installation
 

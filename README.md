@@ -54,7 +54,7 @@ conda create -y -n lerobot python=3.12
 conda activate lerobot
 conda install -y ffmpeg -c conda-forge
 
-cd ur5e-lerobot
+cd UR5e-LeRobot
 git submodule update --init --recursive
 pip install -e .
 

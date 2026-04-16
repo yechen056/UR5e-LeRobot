@@ -8,7 +8,7 @@
 
 # 📖 Introduction
 
-**UR5e-LeRobot (UR5e + PGI)** is a practical real-world robotics extension focused on lowering the barrier to data-driven robot learning with **LeRobot**.
+**UR5e-Lerobot (UR5e + PGI)** is a practical real-world robotics extension focused on lowering the barrier to data-driven robot learning with **LeRobot**.
 
 We focus on an end-to-end workflow for real hardware, from teleoperation to deployment:
 
@@ -45,7 +45,7 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 ## 📢 Update
 
 - **2026/04/13**, Added keyboard teleoperation support and a keyboard-based data collection branch.
-- **2026/04/12**, Officially released the **UR5e-LeRobot** project.
+- **2026/04/12**, Officially released the **UR5e-Lerobot** project.
 
 # 🛠️ Installation
 
@@ -54,7 +54,7 @@ conda create -y -n lerobot python=3.12
 conda activate lerobot
 conda install -y ffmpeg -c conda-forge
 
-cd UR5e-LeRobot
+cd UR5e-Lerobot
 git submodule update --init --recursive
 pip install -e .
 
@@ -149,7 +149,7 @@ lerobot-record \
   --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}, wrist: {type: opencv, index_or_path: 10, width: 640, height: 480, fps: 30} }" \
   --teleop.type=keyboard_ur5e \
   --dataset.repo_id=yechen/ur5e_pgi_keyboard \
-  --dataset.root=/home/yechen/ur5e-lerobot/data/ur5e_pgi_keyboard \
+  --dataset.root=/home/yechen/UR5e-Lerobot/data/ur5e_pgi_keyboard \
   --dataset.single_task="pick up the target object and place it in the target area" \
   --dataset.num_episodes=30 \
   --dataset.fps=20 \
@@ -170,7 +170,7 @@ lerobot-record \
   --teleop.type=quest \
   --teleop.robot_ip=192.168.1.5 \
   --dataset.repo_id=yechen/ur5e_pgi_vr \
-  --dataset.root=/home/yechen/ur5e-lerobot/data/ur5e_pgi_vr \
+  --dataset.root=/home/yechen/UR5e-Lerobot/data/ur5e_pgi_vr \
   --dataset.single_task="pick up the target object and place it in the target area" \
   --dataset.num_episodes=30 \
   --dataset.fps=20 \
@@ -195,7 +195,7 @@ For training, please refer to the official LeRobot training guides for more deta
 ```bash
 lerobot-train \
   --dataset.repo_id=yechen/ur5e_pgi_spnav_demo50 \
-  --dataset.root=/home/yechen/ur5e-lerobot/data/ur5e_pgi_spnav_demo50 \
+  --dataset.root=/home/yechen/UR5e-Lerobot/data/ur5e_pgi_spnav_demo50 \
   --policy.type=act \
   --policy.chunk_size=100 \
   --policy.n_action_steps=100 \
@@ -216,9 +216,9 @@ lerobot-train \
 ```bash
 lerobot-train \
   --dataset.repo_id=yechen/ur5e_pgi_spnav_demo50 \
-  --dataset.root=/home/yechen/ur5e-lerobot/data/ur5e_pgi_spnav_demo50 \
+  --dataset.root=/home/yechen/UR5e-Lerobot/data/ur5e_pgi_spnav_demo50 \
   --policy.type=pi0 \
-  --policy.pretrained_path=/home/yechen/ur5e-lerobot/pi_models/pi0-base \
+  --policy.pretrained_path=/home/yechen/UR5e-Lerobot/pi_models/pi0-base \
   --output_dir=./outputs/pi0_ur5e_lora_abs_v2 \
   --job_name=pi0_ur5e_lora_abs_v2 \
   --policy.dtype=bfloat16 \
@@ -239,9 +239,9 @@ lerobot-train \
 ```bash
 lerobot-train \
   --dataset.repo_id=yechen/ur5e_pgi_spnav_demo50 \
-  --dataset.root=/home/yechen/ur5e-lerobot/data/ur5e_pgi_spnav_demo50 \
+  --dataset.root=/home/yechen/UR5e-Lerobot/data/ur5e_pgi_spnav_demo50 \
   --policy.type=pi05 \
-  --policy.pretrained_path=/home/yechen/ur5e-lerobot/pi_models/pi0.5-base \
+  --policy.pretrained_path=/home/yechen/UR5e-Lerobot/pi_models/pi0.5-base \
   --output_dir=./outputs/pi05_lora \
   --job_name=pi05_lora \
   --policy.dtype=bfloat16 \
@@ -270,14 +270,14 @@ lerobot-record \
   --robot.gripper_port=8887 \
   --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}, wrist: {type: opencv, index_or_path: 10, width: 640, height: 480, fps: 30} }" \
   --dataset.repo_id=yechen/eval_act_ur5e \
-  --dataset.root=/home/yechen/ur5e-lerobot/data/eval_act_ur5e \
+  --dataset.root=/home/yechen/UR5e-Lerobot/data/eval_act_ur5e \
   --dataset.single_task="pick up the target object and place it in the target area" \
   --dataset.num_episodes=10 \
   --dataset.fps=20 \
   --dataset.push_to_hub=false \
   --manual_episode_control=true \
   --display_data=true \
-  --policy.path=/home/yechen/ur5e-lerobot/outputs/act_ur5e/checkpoints/last/pretrained_model
+  --policy.path=/home/yechen/UR5e-Lerobot/outputs/act_ur5e/checkpoints/last/pretrained_model
 ```
 
 - `Run Pi0`
@@ -290,14 +290,14 @@ lerobot-record \
   --robot.gripper_port=8887 \
   --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}, wrist: {type: opencv, index_or_path: 10, width: 640, height: 480, fps: 30} }" \
   --dataset.repo_id=yechen/eval_pi0_ur5e \
-  --dataset.root=/home/yechen/ur5e-lerobot/data/eval_pi0_ur5e \
+  --dataset.root=/home/yechen/UR5e-Lerobot/data/eval_pi0_ur5e \
   --dataset.single_task="pick up the target object and place it in the target area" \
   --dataset.num_episodes=10 \
   --dataset.fps=20 \
   --dataset.push_to_hub=false \
   --manual_episode_control=true \
   --display_data=true \
-  --policy.path=/home/yechen/ur5e-lerobot/outputs/pi0_ur5e/checkpoints/last/pretrained_model
+  --policy.path=/home/yechen/UR5e-Lerobot/outputs/pi0_ur5e/checkpoints/last/pretrained_model
 ```
 
 - `Run Pi05`
@@ -310,14 +310,14 @@ lerobot-record \
   --robot.gripper_port=8887 \
   --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}, wrist: {type: opencv, index_or_path: 10, width: 640, height: 480, fps: 30} }" \
   --dataset.repo_id=yechen/eval_pi05_ur5e \
-  --dataset.root=/home/yechen/ur5e-lerobot/data/eval_pi05_ur5e \
+  --dataset.root=/home/yechen/UR5e-Lerobot/data/eval_pi05_ur5e \
   --dataset.single_task="pick up the target object and place it in the target area" \
   --dataset.num_episodes=10 \
   --dataset.fps=20 \
   --dataset.push_to_hub=false \
   --manual_episode_control=true \
   --display_data=true \
-  --policy.path=/home/yechen/ur5e-lerobot/outputs/pi05_ur5e/checkpoints/last/pretrained_model
+  --policy.path=/home/yechen/UR5e-Lerobot/outputs/pi05_ur5e/checkpoints/last/pretrained_model
 ```
 
 # 📄 License

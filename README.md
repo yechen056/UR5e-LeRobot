@@ -20,7 +20,7 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 | Category | Supported Options |
 |---|---|
 | Hardware | `UR5e`, `PGI gripper` |
-| Robot types | `ur5e_pgi`, `bi_ur5e_pgi` |
+| Robot types | `Single UR5e`, `Bimanual UR5e` |
 | Teleoperation backends | `SpaceMouse`, `Quest 3 (VR)`, `Gello`, `Keyboard` |
 
 > [!IMPORTANT]

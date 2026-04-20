@@ -19,7 +19,7 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 
 | Category | Supported Options |
 |---|---|
-| Hardware | `UR5e`, `PGI gripper`, `Intel camera` |
+| Hardware | `UR5e`, `PGI gripper` |
 | Robot types | `ur5e_pgi`, `bi_ur5e_pgi` |
 | Teleoperation backends | `SpaceMouse`, `Quest 3 (VR)`, `Gello`, `Keyboard` |
 

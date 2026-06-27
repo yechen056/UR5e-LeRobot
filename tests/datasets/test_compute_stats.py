@@ -384,6 +384,25 @@ def test_running_quantile_stats_get_statistics_basic():
     np.testing.assert_equal(stats["count"], np.array([100]))
 
 
+def test_running_quantile_stats_uint8_does_not_overflow_variance():
+    data = np.array(
+        [
+            [0, 64, 255],
+            [255, 128, 0],
+            [128, 255, 64],
+        ],
+        dtype=np.uint8,
+    )
+
+    running_stats = RunningQuantileStats()
+    running_stats.update(data)
+    stats = running_stats.get_statistics()
+
+    np.testing.assert_allclose(stats["mean"], np.mean(data.astype(np.float64), axis=0))
+    np.testing.assert_allclose(stats["std"], np.std(data.astype(np.float64), axis=0))
+    assert np.all(stats["std"] > 0)
+
+
 def test_running_quantile_stats_get_statistics_with_quantiles():
     """Test getting statistics with quantiles."""
     np.random.seed(42)

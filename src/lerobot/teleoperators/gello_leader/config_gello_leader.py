@@ -22,6 +22,7 @@ from ..config import TeleoperatorConfig
 @dataclass
 class GelloLeaderConfigBase:
     port: str
+    baudrate: int = 3_000_000
     motors: dict[str, tuple[int, str]] = field(
         default_factory=lambda: {
             "shoulder_pan": (1, "xl330-m288"),
@@ -40,6 +41,8 @@ class GelloLeaderConfigBase:
     offset_search_range_pi: int = 8
 
     def __post_init__(self):
+        if self.baudrate <= 0:
+            raise ValueError(f"baudrate must be positive, got {self.baudrate}")
         if len(self.start_joints) != 6:
             raise ValueError(f"Expected 6 start_joints entries, got {len(self.start_joints)}")
         if len(self.joint_signs) != 6:

@@ -35,6 +35,7 @@ class BiGelloLeader(Teleoperator):
             id=f"{config.id}_left" if config.id else None,
             calibration_dir=config.calibration_dir,
             port=config.left_arm_config.port,
+            baudrate=config.left_arm_config.baudrate,
             motors=config.left_arm_config.motors,
             start_joints=config.left_arm_config.start_joints,
             joint_signs=config.left_arm_config.joint_signs,
@@ -46,6 +47,7 @@ class BiGelloLeader(Teleoperator):
             id=f"{config.id}_right" if config.id else None,
             calibration_dir=config.calibration_dir,
             port=config.right_arm_config.port,
+            baudrate=config.right_arm_config.baudrate,
             motors=config.right_arm_config.motors,
             start_joints=config.right_arm_config.start_joints,
             joint_signs=config.right_arm_config.joint_signs,
@@ -84,6 +86,21 @@ class BiGelloLeader(Teleoperator):
     def calibrate(self) -> None:
         self.left_arm.calibrate()
         self.right_arm.calibrate()
+
+    def calibrate_to_ur5e(
+        self,
+        left_ur5e_joint_positions: list[float] | tuple[float, ...],
+        right_ur5e_joint_positions: list[float] | tuple[float, ...],
+    ) -> None:
+        """Align both GELLO arms before writing either arm's calibration."""
+        left_offsets, left_gripper_range = self.left_arm._compute_ur5e_alignment(
+            left_ur5e_joint_positions
+        )
+        right_offsets, right_gripper_range = self.right_arm._compute_ur5e_alignment(
+            right_ur5e_joint_positions
+        )
+        self.left_arm._apply_ur5e_alignment(left_offsets, left_gripper_range)
+        self.right_arm._apply_ur5e_alignment(right_offsets, right_gripper_range)
 
     def configure(self) -> None:
         self.left_arm.configure()

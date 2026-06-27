@@ -112,6 +112,8 @@ from lerobot.teleoperators import (  # noqa: F401
     spnav,
     unitree_g1,
 )
+from lerobot.teleoperators.bi_gello_leader import BiGelloLeader
+from lerobot.teleoperators.gello_leader import GelloLeader
 from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardUR5eTeleop
 from lerobot.teleoperators.quest import QuestTeleop, QuestTeleopConfig  # noqa: F401
 from lerobot.teleoperators.spnav import SpnavTeleop, SpnavTeleopConfig  # noqa: F401
@@ -199,6 +201,8 @@ class TeleoperateConfig:
     display_port: int | None = None
     # Whether to  display compressed images in Rerun
     display_compressed_images: bool = False
+    # Force GELLO-to-UR5e paired calibration even when a current calibration file exists.
+    recalibrate: bool = False
 
 
 def teleop_loop(
@@ -297,7 +301,6 @@ def teleop_loop(
             loop_s = time.perf_counter() - loop_start
             print(f"Teleop loop time: {loop_s * 1e3:.2f}ms ({1 / loop_s:.0f} Hz)")
             move_cursor_up(1)
-
             if profile_loop:
                 profile_acc["obs"] += obs_dt
                 profile_acc["action"] += action_dt
@@ -326,12 +329,107 @@ def teleop_loop(
                 return
 
 
+def _is_gello_ur5e_pair(teleop: Teleoperator, robot: Robot) -> bool:
+    return (isinstance(teleop, GelloLeader) and isinstance(robot, UR5ePGI)) or (
+        isinstance(teleop, BiGelloLeader) and isinstance(robot, BiUR5ePGI)
+    )
+
+
+def _validate_gello_ur5e_pair(teleop: Teleoperator, robot: Robot) -> None:
+    if not teleop.id:
+        raise ValueError("GELLO-to-UR5e paired calibration requires a non-empty --teleop.id.")
+    if isinstance(teleop, GelloLeader) and isinstance(robot, UR5ePGI):
+        action_modes = (robot.config.action_mode,)
+    elif isinstance(teleop, BiGelloLeader) and isinstance(robot, BiUR5ePGI):
+        action_modes = (robot.left_arm.config.action_mode, robot.right_arm.config.action_mode)
+    else:
+        raise ValueError(
+            "GELLO paired calibration requires gello_leader + ur5e_pgi or "
+            "bi_gello_leader + bi_ur5e_pgi."
+        )
+    if any(mode != "joint" for mode in action_modes):
+        raise ValueError("GELLO-to-UR5e teleoperation requires action_mode=joint for every UR5e arm.")
+
+
+def _open_pgi_gripper_for_calibration(robot: UR5ePGI) -> None:
+    if robot.config.has_gripper and robot._gripper is not None:
+        robot._gripper.set_position(1000)
+        logger.info("Commanded the PGI gripper fully open for GELLO calibration.")
+
+
+def _run_gello_ur5e_calibration(
+    teleop: GelloLeader | BiGelloLeader, robot: UR5ePGI | BiUR5ePGI
+) -> None:
+    if isinstance(teleop, GelloLeader) and isinstance(robot, UR5ePGI):
+        _open_pgi_gripper_for_calibration(robot)
+        input(
+            "\nGELLO-UR5e calibration\n"
+            "Place the GELLO at the same six-joint pose as the stationary UR5e, fully open the "
+            "GELLO gripper, then press ENTER..."
+        )
+        teleop.calibrate_to_ur5e(robot.get_joint_positions())
+        return
+
+    if isinstance(teleop, BiGelloLeader) and isinstance(robot, BiUR5ePGI):
+        _open_pgi_gripper_for_calibration(robot.left_arm)
+        _open_pgi_gripper_for_calibration(robot.right_arm)
+        input(
+            "\nBimanual GELLO-UR5e calibration\n"
+            "Place both GELLO arms at the same six-joint poses as their stationary UR5e arms, "
+            "fully open both GELLO grippers, then press ENTER..."
+        )
+        teleop.calibrate_to_ur5e(
+            robot.left_arm.get_joint_positions().tolist(),
+            robot.right_arm.get_joint_positions().tolist(),
+        )
+        return
+
+    raise ValueError("Unsupported GELLO-to-UR5e calibration pair.")
+
+
+def _cleanup_failed_connection(device: Teleoperator | Robot) -> None:
+    """Best-effort cleanup for a device whose connect() raised partway through."""
+    child_devices = [
+        child
+        for name in ("left_arm", "right_arm")
+        if (child := getattr(device, name, None)) is not None
+    ]
+    if child_devices:
+        for child in child_devices:
+            if child.is_connected:
+                try:
+                    child.disconnect()
+                except Exception:
+                    logger.exception("Failed to clean up partially connected %s.", child)
+        return
+
+    try:
+        if device.is_connected:
+            device.disconnect()
+            return
+        undecorated_disconnect = getattr(type(device).disconnect, "__wrapped__", None)
+        if undecorated_disconnect is not None:
+            undecorated_disconnect(device)
+    except Exception:
+        logger.exception("Failed to clean up partially connected %s.", device)
+
+
+def _validate_spnav_ur5e_pair(teleop: Teleoperator, robot: Robot) -> None:
+    if not isinstance(teleop, SpnavTeleop) or not isinstance(robot, UR5ePGI):
+        return
+    if teleop.config.action_mode != robot.config.action_mode:
+        raise ValueError(
+            "SpaceMouse and UR5e action modes must match. "
+            f"Got --teleop.action_mode={teleop.config.action_mode!r} and "
+            f"--robot.action_mode={robot.config.action_mode!r}. "
+            "For EEF teleoperation, add `--teleop.action_mode=eef`."
+        )
+
+
 @parser.wrap()
 def teleoperate(cfg: TeleoperateConfig):
     init_logging()
     logging.info(pformat(asdict(cfg)))
-    if cfg.display_data:
-        init_rerun(session_name="teleoperation", ip=cfg.display_ip, port=cfg.display_port)
     display_compressed_images = (
         True
         if (cfg.display_data and cfg.display_ip is not None and cfg.display_port is not None)
@@ -341,69 +439,89 @@ def teleoperate(cfg: TeleoperateConfig):
     teleop = make_teleoperator_from_config(cfg.teleop)
     robot = make_robot_from_config(cfg.robot)
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+    paired_gello = _is_gello_ur5e_pair(teleop, robot)
+    if paired_gello:
+        _validate_gello_ur5e_pair(teleop, robot)
+    elif cfg.recalibrate:
+        raise ValueError("--recalibrate=true is only supported for a GELLO-to-UR5e pair.")
+    _validate_spnav_ur5e_pair(teleop, robot)
 
-    teleop.connect()
+    if cfg.display_data:
+        init_rerun(session_name="teleoperation", ip=cfg.display_ip, port=cfg.display_port)
 
-    if isinstance(robot, UR5ePGI) and isinstance(teleop, KeyboardUR5eTeleop):
-        if robot.config.action_mode != "eef":
-            raise ValueError(
-                "Keyboard UR5e teleoperation executes in EEF mode. Use `--robot.action_mode=eef`."
-            )
-    elif (
-        isinstance(teleop, SpnavTeleop)
-        and isinstance(robot, UR5ePGI)
-        and teleop.config.robot_ip == robot.config.robot_ip
-    ):
-        robot._rtde_control = teleop._rtde_control
-        robot._rtde_receive = teleop._rtde_receive
-        robot._owns_rtde_session = False
-    elif isinstance(teleop, QuestTeleop):
-        if (
-            isinstance(robot, UR5ePGI)
-            and not teleop.config.bimanual
-            and len(teleop._arms) == 1
-            and teleop._arms[0].robot_ip == robot.config.robot_ip
+    teleop_connection_attempted = False
+    teleop_connected = False
+    robot_connection_attempted = False
+    robot_connected = False
+    try:
+        teleop_connection_attempted = True
+        teleop.connect(calibrate=not paired_gello)
+        teleop_connected = True
+
+        if isinstance(robot, UR5ePGI) and isinstance(teleop, KeyboardUR5eTeleop):
+            if robot.config.action_mode != "eef":
+                raise ValueError(
+                    "Keyboard UR5e teleoperation executes in EEF mode. Use `--robot.action_mode=eef`."
+                )
+        elif (
+            isinstance(teleop, SpnavTeleop)
+            and isinstance(robot, UR5ePGI)
+            and teleop.config.robot_ip == robot.config.robot_ip
         ):
-            robot._rtde_control = teleop._arms[0].rtde_control
-            robot._rtde_receive = teleop._arms[0].rtde_receive
+            robot._rtde_control = teleop._rtde_control
+            robot._rtde_receive = teleop._rtde_receive
             robot._owns_rtde_session = False
-        elif isinstance(robot, BiUR5ePGI) and teleop.config.bimanual:
-            arms_by_prefix = {arm.prefix: arm for arm in teleop._arms}
-            left_arm = arms_by_prefix.get("left_")
-            right_arm = arms_by_prefix.get("right_")
-            if left_arm is not None and left_arm.robot_ip == robot.left_arm.config.robot_ip:
-                robot.left_arm._rtde_control = left_arm.rtde_control
-                robot.left_arm._rtde_receive = left_arm.rtde_receive
-                robot.left_arm._owns_rtde_session = False
-            if right_arm is not None and right_arm.robot_ip == robot.right_arm.config.robot_ip:
-                robot.right_arm._rtde_control = right_arm.rtde_control
-                robot.right_arm._rtde_receive = right_arm.rtde_receive
-                robot.right_arm._owns_rtde_session = False
+        elif isinstance(teleop, QuestTeleop):
+            if (
+                isinstance(robot, UR5ePGI)
+                and not teleop.config.bimanual
+                and len(teleop._arms) == 1
+                and teleop._arms[0].robot_ip == robot.config.robot_ip
+            ):
+                robot._rtde_control = teleop._arms[0].rtde_control
+                robot._rtde_receive = teleop._arms[0].rtde_receive
+                robot._owns_rtde_session = False
+            elif isinstance(robot, BiUR5ePGI) and teleop.config.bimanual:
+                arms_by_prefix = {arm.prefix: arm for arm in teleop._arms}
+                left_arm = arms_by_prefix.get("left_")
+                right_arm = arms_by_prefix.get("right_")
+                if left_arm is not None and left_arm.robot_ip == robot.left_arm.config.robot_ip:
+                    robot.left_arm._rtde_control = left_arm.rtde_control
+                    robot.left_arm._rtde_receive = left_arm.rtde_receive
+                    robot.left_arm._owns_rtde_session = False
+                if right_arm is not None and right_arm.robot_ip == robot.right_arm.config.robot_ip:
+                    robot.right_arm._rtde_control = right_arm.rtde_control
+                    robot.right_arm._rtde_receive = right_arm.rtde_receive
+                    robot.right_arm._owns_rtde_session = False
 
-    robot.connect()
+        robot_connection_attempted = True
+        robot.connect()
+        robot_connected = True
 
-    if isinstance(teleop, SpnavTeleop) and isinstance(robot, UR5ePGI):
-        teleop._gripper_target = 1.0
-        if robot.config.has_gripper and robot._gripper is not None:
-            robot._gripper.set_position(1000)
-            logger.info("Opened the PGI gripper for teleoperation startup.")
-    elif isinstance(teleop, QuestTeleop):
-        if isinstance(robot, UR5ePGI):
-            for arm in teleop._arms:
-                arm.gripper_target = 1.0
+        if paired_gello and (cfg.recalibrate or not teleop.is_calibrated):
+            _run_gello_ur5e_calibration(teleop, robot)
+
+        if isinstance(teleop, SpnavTeleop) and isinstance(robot, UR5ePGI):
+            teleop._gripper_target = 1.0
             if robot.config.has_gripper and robot._gripper is not None:
                 robot._gripper.set_position(1000)
-                logger.info("Opened the PGI gripper for Quest teleoperation startup.")
-        elif isinstance(robot, BiUR5ePGI):
-            for arm in teleop._arms:
-                arm.gripper_target = 1.0
-            if robot.left_arm.config.has_gripper and robot.left_arm._gripper is not None:
-                robot.left_arm._gripper.set_position(1000)
-            if robot.right_arm.config.has_gripper and robot.right_arm._gripper is not None:
-                robot.right_arm._gripper.set_position(1000)
-            logger.info("Opened the PGI grippers for Quest teleoperation startup.")
+                logger.info("Opened the PGI gripper for teleoperation startup.")
+        elif isinstance(teleop, QuestTeleop):
+            if isinstance(robot, UR5ePGI):
+                for arm in teleop._arms:
+                    arm.gripper_target = 1.0
+                if robot.config.has_gripper and robot._gripper is not None:
+                    robot._gripper.set_position(1000)
+                    logger.info("Opened the PGI gripper for Quest teleoperation startup.")
+            elif isinstance(robot, BiUR5ePGI):
+                for arm in teleop._arms:
+                    arm.gripper_target = 1.0
+                if robot.left_arm.config.has_gripper and robot.left_arm._gripper is not None:
+                    robot.left_arm._gripper.set_position(1000)
+                if robot.right_arm.config.has_gripper and robot.right_arm._gripper is not None:
+                    robot.right_arm._gripper.set_position(1000)
+                logger.info("Opened the PGI grippers for Quest teleoperation startup.")
 
-    try:
         teleop_loop(
             teleop=teleop,
             robot=robot,
@@ -419,9 +537,21 @@ def teleoperate(cfg: TeleoperateConfig):
         pass
     finally:
         if cfg.display_data:
-            rr.rerun_shutdown()
-        robot.disconnect()
-        teleop.disconnect()
+            try:
+                rr.rerun_shutdown()
+            except Exception:
+                logger.exception("Failed to shut down Rerun cleanly.")
+        for device, connected, attempted in (
+            (robot, robot_connected, robot_connection_attempted),
+            (teleop, teleop_connected, teleop_connection_attempted),
+        ):
+            try:
+                if connected:
+                    device.disconnect()
+                elif attempted:
+                    _cleanup_failed_connection(device)
+            except Exception:
+                logger.exception("Failed to disconnect %s cleanly.", device)
 
 
 def main():

@@ -50,16 +50,14 @@ class _QuestArmState:
         return self.hand
 
     @property
-    def trigger_key(self) -> str:
+    def motion_trigger_key(self) -> str:
+        """Inner grip trigger used to engage arm motion."""
+        return "leftGrip" if self.hand == "l" else "rightGrip"
+
+    @property
+    def gripper_trigger_key(self) -> str:
+        """Front index trigger used for proportional gripper closure."""
         return "leftTrig" if self.hand == "l" else "rightTrig"
-
-    @property
-    def gripper_open_key(self) -> str:
-        return "Y" if self.hand == "l" else "B"
-
-    @property
-    def gripper_close_key(self) -> str:
-        return "X" if self.hand == "l" else "A"
 
 
 class QuestTeleop(Teleoperator):
@@ -147,6 +145,21 @@ class QuestTeleop(Teleoperator):
         pass
 
     @check_if_not_connected
+    def reset_reference_from_robot(self) -> None:
+        """Reset controller anchors to each UR5e arm's current pose."""
+        for arm in self._arms:
+            assert arm.rtde_receive is not None
+            current_tcp = np.asarray(arm.rtde_receive.getActualTCPPose(), dtype=np.float64)
+            current_joints = np.asarray(arm.rtde_receive.getActualQ(), dtype=np.float64)
+            arm.control_active = False
+            arm.reference_quest_pose = None
+            arm.reference_tcp_pos = None
+            arm.reference_tcp_rot = None
+            arm.last_target_tcp = self._tcp_with_gripper(current_tcp, arm.gripper_target)
+            arm.last_joint_action = self._joint_with_gripper(current_joints, arm.gripper_target)
+        logger.info("Reset Quest reference to the UR5e arm's current pose.")
+
+    @check_if_not_connected
     def get_action(self) -> dict[str, float]:
         assert self._oculus_reader is not None
 
@@ -162,13 +175,31 @@ class QuestTeleop(Teleoperator):
 
     @check_if_not_connected
     def disconnect(self) -> None:
-        self._oculus_reader = None
+        reader = self._oculus_reader
+        if reader is not None:
+            try:
+                reader.stop()
+            except Exception:
+                logger.exception("Failed to stop the Quest ADB reader cleanly.")
+            finally:
+                self._oculus_reader = None
+
         for arm in self._arms:
+            if arm.rtde_control is not None:
+                try:
+                    arm.rtde_control.servoStop()
+                except Exception:
+                    logger.exception("Failed to stop Quest RTDE servo for %s arm.", arm.hand)
+                try:
+                    arm.rtde_control.stopScript()
+                except Exception:
+                    logger.exception("Failed to stop Quest RTDE script for %s arm.", arm.hand)
             arm.rtde_control = None
             arm.rtde_receive = None
             arm.control_active = False
             arm.reference_quest_pose = None
         self._is_connected = False
+        logger.info("%s disconnected.", self)
 
     def _make_arm_states(self) -> list[_QuestArmState]:
         initial_gripper = float(np.clip(self.config.gripper_initial_pos, 0.0, 1.0))
@@ -203,7 +234,7 @@ class QuestTeleop(Teleoperator):
             hold_tcp[6] = arm.gripper_target
             hold_joint[6] = arm.gripper_target
 
-        trigger_value = self._trigger_value(arm, button_data)
+        trigger_value = self._motion_trigger_value(arm, button_data)
         if trigger_value <= 0.5 or not pose_data or arm.pose_key not in pose_data:
             arm.control_active = False
             arm.reference_quest_pose = None
@@ -313,17 +344,25 @@ class QuestTeleop(Teleoperator):
     def _update_gripper_target(self, arm: _QuestArmState, button_data: dict[str, Any] | None) -> None:
         if not self.config.use_gripper or not button_data:
             return
-        if bool(button_data.get(arm.gripper_open_key, False)):
-            arm.gripper_target = 1.0
-        if bool(button_data.get(arm.gripper_close_key, False)):
-            arm.gripper_target = 0.0
-        arm.gripper_target = float(np.clip(arm.gripper_target, 0.0, 1.0))
+        if arm.gripper_trigger_key not in button_data:
+            return
 
-    def _trigger_value(self, arm: _QuestArmState, button_data: dict[str, Any] | None) -> float:
+        # PGI convention: 1.0 is fully open and 0.0 is fully closed. The
+        # controller's front trigger reports 0.0 when released and 1.0 when
+        # fully pressed, so invert it to get a proportional gripper target.
+        trigger_value = self._button_axis_value(button_data[arm.gripper_trigger_key])
+        arm.gripper_target = 1.0 - float(np.clip(trigger_value, 0.0, 1.0))
+
+    def _motion_trigger_value(
+        self, arm: _QuestArmState, button_data: dict[str, Any] | None
+    ) -> float:
         if not button_data:
             return 0.0
-        state = button_data.get(arm.trigger_key, (0.0,))
-        if isinstance(state, (list, tuple, np.ndarray)):
+        return self._button_axis_value(button_data.get(arm.motion_trigger_key, (0.0,)))
+
+    @staticmethod
+    def _button_axis_value(state: Any) -> float:
+        if isinstance(state, list | tuple | np.ndarray):
             return float(state[0]) if len(state) > 0 else 0.0
         return float(state)
 

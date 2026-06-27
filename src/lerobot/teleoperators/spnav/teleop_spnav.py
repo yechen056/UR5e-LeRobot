@@ -29,6 +29,32 @@ from .configuration_spnav import SpnavTeleopConfig
 logger = logging.getLogger(__name__)
 
 
+def _load_spnav_backend():
+    try:
+        import spnav
+
+        return spnav
+    except AttributeError as exc:
+        if "PyCObject_AsVoidPtr" not in str(exc):
+            raise
+        logger.warning(
+            "The installed `spnav` package is not compatible with this Python version; "
+            "using the local libspnav compatibility backend."
+        )
+    except ImportError:
+        logger.info("The `spnav` Python package is unavailable; using the local libspnav backend.")
+
+    try:
+        from . import spnav_compat
+    except OSError as exc:
+        raise ImportError(
+            "SpaceMouse teleoperation requires either a working `spnav` Python package or "
+            "the system `libspnav.so` library."
+        ) from exc
+
+    return spnav_compat
+
+
 class SpnavTeleop(Teleoperator):
     """SpaceMouse teleoperator that outputs UR joint targets through UR RTDE IK."""
 
@@ -87,10 +113,7 @@ class SpnavTeleop(Teleoperator):
     def connect(self, calibrate: bool = True) -> None:
         del calibrate
 
-        try:
-            import spnav
-        except ImportError as exc:
-            raise ImportError("spnav teleoperation requires the `spnav` Python package.") from exc
+        spnav = _load_spnav_backend()
 
         try:
             from rtde_control import RTDEControlInterface
@@ -112,6 +135,17 @@ class SpnavTeleop(Teleoperator):
 
     def configure(self) -> None:
         pass
+
+    @check_if_not_connected
+    def reset_reference_from_robot(self) -> None:
+        """Reset episode-relative input state around the robot's current pose."""
+        assert self._rtde_receive is not None
+        # Reading both values makes the episode anchor explicit and validates the live RTDE session.
+        np.asarray(self._rtde_receive.getActualTCPPose(), dtype=np.float64)
+        np.asarray(self._rtde_receive.getActualQ(), dtype=np.float64)
+        self._motion_state.fill(0.0)
+        self._button_state.clear()
+        logger.info("Reset SpaceMouse reference to the UR5e's current pose.")
 
     @check_if_not_connected
     def get_action(self) -> dict[str, float]:

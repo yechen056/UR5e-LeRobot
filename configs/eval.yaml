@@ -1,0 +1,44 @@
+robot:
+  type: bi_ur5e_pgi
+  left_arm_config:
+    robot_ip: 192.168.1.3
+    gripper_ip: 192.168.1.8
+    gripper_port: 8888
+    action_mode: joint
+    cameras:
+      wrist:
+        type: intelrealsense
+        serial_number_or_name: "243722070241"
+        width: 640
+        height: 480
+        fps: 30
+      global:
+        type: opencv
+        index_or_path: /dev/video6
+        width: 640
+        height: 480
+        fps: 30
+  right_arm_config:
+    robot_ip: 192.168.1.5
+    gripper_ip: 192.168.1.7
+    gripper_port: 8887
+    action_mode: joint
+    cameras:
+      wrist:
+        type: intelrealsense
+        serial_number_or_name: "939622075456"
+        width: 640
+        height: 480
+        fps: 30
+
+dataset:
+  repo_id: FANYECHEN/eval_pi0
+  root: data/eval_pi0
+  num_episodes: 10
+  fps: 30
+  single_task: Place the banana and the red pepper into the orange tray.
+  push_to_hub: false
+
+manual_episode_control: true
+display_data: false
+# resume: true

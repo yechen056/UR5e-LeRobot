@@ -154,10 +154,11 @@ class VQBeTConfig(PreTrainedConfig):
         )
 
     def validate_features(self) -> None:
-        # Note: this check was previously performed inside VQBeTRgbEncoder in the form of
-        # assert len(image_keys) == 1
-        if not len(self.image_features) == 1:
-            raise ValueError("You must provide only one image among the inputs.")
+        # VQ-BeT can consume multiple camera views. Each image is encoded with the shared RGB encoder and
+        # then inserted as a separate token for the GPT policy. Keep supporting the original single-camera
+        # setup, but allow multi-camera inputs as long as all image tensors have the same shape.
+        if len(self.image_features) < 1:
+            raise ValueError("You must provide at least one image among the inputs.")
 
         if self.crop_shape is not None:
             for key, image_ft in self.image_features.items():

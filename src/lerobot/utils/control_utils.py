@@ -139,7 +139,6 @@ def init_keyboard_listener(disable_arrow_hotkeys: bool = False):
     events["start_episode"] = False
     events["stop_episode"] = False
     events["delete_last_episode"] = False
-    events["move_home"] = False
 
     if is_headless():
         logging.warning(
@@ -165,7 +164,7 @@ def init_keyboard_listener(disable_arrow_hotkeys: bool = False):
                 events["rerecord_episode"] = True
                 events["exit_early"] = True
             elif key == keyboard.Key.backspace:
-                print("Backspace key pressed. Stopping and discarding the current/last episode...")
+                print("Backspace key pressed. Stopping and discarding the current episode...")
                 events["delete_last_episode"] = True
                 events["exit_early"] = True
             elif key == keyboard.Key.esc:
@@ -177,9 +176,6 @@ def init_keyboard_listener(disable_arrow_hotkeys: bool = False):
                 if key_char == "c":
                     print("'c' key pressed. Starting episode recording...")
                     events["start_episode"] = True
-                elif key_char == "h":
-                    print("'h' key pressed. Moving robot to the configured home pose...")
-                    events["move_home"] = True
                 elif key_char == "s":
                     print("'s' key pressed. Stopping current episode...")
                     events["stop_episode"] = True

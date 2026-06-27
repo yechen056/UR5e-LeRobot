@@ -88,7 +88,9 @@ class KeyboardTeleop(Teleoperator):
         pass
 
     @check_if_already_connected
-    def connect(self) -> None:
+    def connect(self, calibrate: bool = True) -> None:
+        del calibrate
+
         if PYNPUT_AVAILABLE:
             logging.info("pynput is available - enabling local keyboard listener.")
             self.listener = keyboard.Listener(
@@ -302,7 +304,9 @@ class KeyboardUR5eTeleop(KeyboardTeleop):
         return {"dtype": "float32", "shape": (shape,), "names": names}
 
     @check_if_already_connected
-    def connect(self) -> None:
+    def connect(self, calibrate: bool = True) -> None:
+        del calibrate
+
         if not PYNPUT_AVAILABLE or keyboard is None:
             raise RuntimeError(
                 "Keyboard UR5e teleoperation requires `pynput` and an active local keyboard/display session."

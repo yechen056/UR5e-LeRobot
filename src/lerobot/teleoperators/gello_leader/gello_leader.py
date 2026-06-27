@@ -35,10 +35,14 @@ logger = logging.getLogger(__name__)
 class GelloLeader(Teleoperator):
     config_class = GelloLeaderConfig
     name = "gello_leader"
+    calibration_format_version = 2
+    calibration_mode = "ur5e_joint_alignment"
 
     def __init__(self, config: GelloLeaderConfig):
         self.joint_offsets: np.ndarray | None = None
         self.gripper_open_close_rad: tuple[float, float] | None = None
+        self._loaded_calibration_format_version: int | None = None
+        self._loaded_calibration_mode: str | None = None
         super().__init__(config)
         self.config = config
         self._start_joints = np.asarray(self.config.start_joints, dtype=np.float64)
@@ -67,14 +71,21 @@ class GelloLeader(Teleoperator):
 
     @property
     def is_calibrated(self) -> bool:
-        return (
-            self.joint_offsets is not None
+        return bool(
+            self._loaded_calibration_format_version == self.calibration_format_version
+            and self._loaded_calibration_mode == self.calibration_mode
+            and self.joint_offsets is not None
             and self.joint_offsets.shape == (6,)
+            and np.all(np.isfinite(self.joint_offsets))
             and self.gripper_open_close_rad is not None
+            and len(self.gripper_open_close_rad) == 2
+            and np.all(np.isfinite(self.gripper_open_close_rad))
         )
 
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
+        # PortHandler.openPort() opens the serial device using this value.
+        self.bus.port_handler.baudrate = self.config.baudrate
         self.bus.connect()
         if not self.is_calibrated and calibrate:
             logger.info("No gello offset calibration found for %s", self)
@@ -84,30 +95,45 @@ class GelloLeader(Teleoperator):
         logger.info("%s connected.", self)
 
     def calibrate(self) -> None:
-        if self.is_calibrated:
-            user_input = input(
-                f"Press ENTER to use the existing offset calibration for {self.id}, or type 'c' and press ENTER to recalibrate: "
-            )
-            if user_input.strip().lower() != "c":
-                return
-
-        logger.info("Running gello_get_offset-style calibration for %s", self)
-        self.bus.disable_torque()
-        self._reset_torque_mode()
-        input(
-            "\nCalibration: start pose\n"
-            "Place the 6 arm joints at the configured start_joints pose and put the gripper in its open reference pose, then press ENTER..."
+        raise RuntimeError(
+            "GELLO calibration requires live UR5e joint positions. Run lerobot-teleoperate with a "
+            "gello_leader/ur5e_pgi pair instead of calibrating the GELLO device by itself."
         )
 
+    def calibrate_to_ur5e(self, ur5e_joint_positions: np.ndarray | list[float] | tuple[float, ...]) -> None:
+        """Align this GELLO's current pose with a UR5e's current six joint positions."""
+        offsets, gripper_range = self._compute_ur5e_alignment(ur5e_joint_positions)
+        self._apply_ur5e_alignment(offsets, gripper_range)
+
+    def _compute_ur5e_alignment(
+        self, ur5e_joint_positions: np.ndarray | list[float] | tuple[float, ...]
+    ) -> tuple[np.ndarray, tuple[float, float]]:
+        ur5e_joints = np.asarray(ur5e_joint_positions, dtype=np.float64)
+        if ur5e_joints.shape != (6,):
+            raise ValueError(f"Expected 6 UR5e joint positions, got shape {ur5e_joints.shape}.")
+        if not np.all(np.isfinite(ur5e_joints)):
+            raise ValueError("UR5e joint positions must all be finite.")
+
         raw_joint_radians = self._read_raw_joint_radians()
-        self.joint_offsets = self._estimate_joint_offsets(raw_joint_radians[:6])
+        if raw_joint_radians.shape != (7,) or not np.all(np.isfinite(raw_joint_radians)):
+            raise ValueError("Expected 7 finite raw GELLO joint positions.")
+
+        joint_offsets = raw_joint_radians[:6] - self._joint_signs * ur5e_joints
 
         raw_gripper_rad = float(raw_joint_radians[-1])
-        self.gripper_open_close_rad = (
+        gripper_open_close_rad = (
             raw_gripper_rad - math.radians(self.config.gripper_open_correction_deg),
             raw_gripper_rad - math.radians(self.config.gripper_close_delta_deg),
         )
+        return joint_offsets, gripper_open_close_rad
 
+    def _apply_ur5e_alignment(
+        self, joint_offsets: np.ndarray, gripper_open_close_rad: tuple[float, float]
+    ) -> None:
+        self.joint_offsets = np.asarray(joint_offsets, dtype=np.float64)
+        self.gripper_open_close_rad = tuple(float(value) for value in gripper_open_close_rad)
+        self._loaded_calibration_format_version = self.calibration_format_version
+        self._loaded_calibration_mode = self.calibration_mode
         self._save_calibration()
         logger.info("Calibration saved to %s", self.calibration_fpath)
 
@@ -174,32 +200,13 @@ class GelloLeader(Teleoperator):
             raw_joint_radians.append(float(position) / max_res * 2 * math.pi)
         return np.asarray(raw_joint_radians, dtype=np.float64)
 
-    def _estimate_joint_offsets(self, arm_joint_radians: np.ndarray) -> np.ndarray:
-        best_offsets = []
-        candidate_offsets = np.linspace(
-            -self.config.offset_search_range_pi * math.pi,
-            self.config.offset_search_range_pi * math.pi,
-            self.config.offset_search_range_pi * 4 + 1,
-        )
-        for joint_index, current_joint in enumerate(arm_joint_radians):
-            best_offset = 0.0
-            best_error = float("inf")
-            for offset in candidate_offsets:
-                calibrated_joint = self._joint_signs[joint_index] * (current_joint - offset)
-                error = abs(calibrated_joint - self._start_joints[joint_index])
-                if error < best_error:
-                    best_error = error
-                    best_offset = float(offset)
-            best_offsets.append(best_offset)
-        return np.asarray(best_offsets, dtype=np.float64)
-
     def _normalize_gripper(self, raw_gripper_rad: float) -> float:
         assert self.gripper_open_close_rad is not None
         open_rad, close_rad = self.gripper_open_close_rad
-        denominator = close_rad - open_rad
+        denominator = open_rad - close_rad
         if abs(denominator) < 1e-6:
             return 0.0
-        normalized = (raw_gripper_rad - open_rad) / denominator
+        normalized = (raw_gripper_rad - close_rad) / denominator
         return float(min(max(normalized, 0.0), 1.0))
 
     def _load_calibration(self, fpath: Path | None = None) -> None:
@@ -207,6 +214,8 @@ class GelloLeader(Teleoperator):
         with open(fpath) as f:
             data = json.load(f)
 
+        self._loaded_calibration_format_version = data.get("format_version")
+        self._loaded_calibration_mode = data.get("calibration_mode")
         joint_offsets = data.get("joint_offsets")
         self.joint_offsets = (
             np.asarray(joint_offsets, dtype=np.float64) if joint_offsets is not None else None
@@ -217,6 +226,8 @@ class GelloLeader(Teleoperator):
     def _save_calibration(self, fpath: Path | None = None) -> None:
         fpath = self.calibration_fpath if fpath is None else fpath
         payload = {
+            "format_version": self.calibration_format_version,
+            "calibration_mode": self.calibration_mode,
             "joint_offsets": self.joint_offsets.tolist() if self.joint_offsets is not None else None,
             "joint_signs": self._joint_signs.tolist(),
             "start_joints": self._start_joints.tolist(),

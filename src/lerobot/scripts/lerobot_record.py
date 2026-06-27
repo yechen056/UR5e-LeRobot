@@ -160,9 +160,14 @@ from lerobot.utils.utils import (
 )
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
-UR5E_PGI_HOME_TCP_POSE = (-0.11130, -0.48927, 0.22326, 3.152, -0.007, -0.001)
 GREEN_BOLD = "\033[1;92m"
 RESET_COLOR = "\033[0m"
+
+
+@dataclass(frozen=True)
+class _RobotStartPose:
+    tcp_pose: tuple[float, float, float, float, float, float]
+    gripper_target: float | None
 
 
 def _get_keyboard_ur5e_record_action_features(robot: UR5ePGI, teleop: KeyboardUR5eTeleop) -> dict[str, type]:
@@ -218,6 +223,61 @@ def _print_episode_banner(current_episode_number: int, target_episode_number: in
     print(
         f"{GREEN_BOLD}=== Recording Episode {current_episode_number}/{target_episode_number} ==={RESET_COLOR}"
     )
+
+
+def _initialize_relative_teleop_reference(teleop: Teleoperator | list[Teleoperator] | None) -> None:
+    """Anchor relative-pose teleoperators once to the robot state at program startup."""
+    if isinstance(teleop, SpnavTeleop | QuestTeleop):
+        teleop.reset_reference_from_robot()
+
+
+def _capture_robot_start_poses(
+    robot: Robot, teleop: Teleoperator | list[Teleoperator] | None
+) -> dict[str, _RobotStartPose]:
+    """Capture startup poses for UR arms that may need to return to their start state.
+
+    This is useful both for teleoperation and for policy evaluation. In policy-only
+    evaluation there is no teleoperator, but manual episode control should still be
+    able to return the robot to its startup pose after saving or discarding an episode.
+    """
+    if not isinstance(robot, UR5ePGI | BiUR5ePGI):
+        return {}
+
+    def capture_arm(arm: UR5ePGI) -> _RobotStartPose:
+        tcp = tuple(float(value) for value in arm.get_tcp_pose())
+        gripper = arm._read_gripper_position() if arm.config.has_gripper else None
+        return _RobotStartPose(tcp_pose=tcp, gripper_target=gripper)
+
+    if isinstance(robot, UR5ePGI):
+        return {"": capture_arm(robot)}
+    if isinstance(robot, BiUR5ePGI):
+        return {"left": capture_arm(robot.left_arm), "right": capture_arm(robot.right_arm)}
+    return {}
+
+
+def _move_robot_to_start_poses(
+    robot: Robot,
+    teleop: Teleoperator | list[Teleoperator] | None,
+    start_poses: dict[str, _RobotStartPose] | None,
+) -> None:
+    if not start_poses:
+        logging.info("No startup pose is configured for this robot/teleoperator pair.")
+        return
+
+    if isinstance(robot, UR5ePGI) and "" in start_poses:
+        pose = start_poses[""]
+        robot.move_to_tcp_pose(pose.tcp_pose, gripper_target=pose.gripper_target)
+    elif isinstance(robot, BiUR5ePGI) and "left" in start_poses and "right" in start_poses:
+        left_pose = start_poses["left"]
+        right_pose = start_poses["right"]
+        robot.left_arm.move_to_tcp_pose(left_pose.tcp_pose, gripper_target=left_pose.gripper_target)
+        robot.right_arm.move_to_tcp_pose(right_pose.tcp_pose, gripper_target=right_pose.gripper_target)
+    else:
+        logging.warning("Captured startup poses do not match robot type %s.", robot.name)
+        return
+
+    _initialize_relative_teleop_reference(teleop)
+    logging.info("Moved robot arm(s) to the poses captured at program startup.")
 
 
 @dataclass
@@ -301,7 +361,7 @@ class RecordConfig:
     # Only applies when using a policy (not teleop)
     interpolation_multiplier: int = 1
     # When true, episodes are controlled manually with the keyboard:
-    # `c` starts an episode, `s` stops it, `backspace` discards the last stopped episode.
+    # `c` starts an episode, `s` stops and commits it, `backspace` immediately discards it.
     manual_episode_control: bool = False
 
     def __post_init__(self):
@@ -378,6 +438,9 @@ def record_loop(
     interpolator: ActionInterpolator | None = None,
     display_compressed_images: bool = False,
     manual_episode_control: bool = False,
+    wait_for_episode_start: bool = False,
+    record_frames: bool = True,
+    quiet_no_action: bool = False,
 ):
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
@@ -420,6 +483,7 @@ def record_loop(
     # Calculate control interval based on interpolation
     use_interpolation = interpolator is not None and interpolator.enabled and policy is not None
     control_interval = interpolator.get_control_interval(fps) if interpolator else 1 / fps
+    target_control_hz = 1 / control_interval
     # Pre-compute action key order outside the hot loop — it won't change mid-episode.
     action_keys = sorted(robot.action_features) if use_interpolation else []
 
@@ -429,15 +493,16 @@ def record_loop(
     while control_time_s is None or timestamp < control_time_s:
         start_loop_t = time.perf_counter()
 
-        if events["move_home"]:
-            events["move_home"] = False
-            if isinstance(robot, UR5ePGI):
-                logging.info("Moving UR5e to the configured home TCP pose.")
-                robot.move_to_tcp_pose(UR5E_PGI_HOME_TCP_POSE, gripper_target=1.0)
-            continue
+        if wait_for_episode_start and events["start_episode"]:
+            events["exit_early"] = False
+            break
+
+        if manual_episode_control and events["delete_last_episode"]:
+            events["exit_early"] = False
+            break
 
         if manual_episode_control and events["stop_episode"]:
-            events["stop_episode"] = False
+            # Leave stop_episode set so the outer manual-control state machine commits this episode.
             events["exit_early"] = False
             break
 
@@ -531,7 +596,7 @@ def record_loop(
             robot_action_to_send = robot_action_processor((act_processed_teleop, obs))
         else:
             no_action_count += 1
-            if no_action_count == 1 or no_action_count % 10 == 0:
+            if not quiet_no_action and (no_action_count == 1 or no_action_count % 10 == 0):
                 logging.warning(
                     "No policy or teleoperator provided, skipping action generation. "
                     "This is likely to happen when resetting the environment without a teleop device. "
@@ -546,7 +611,7 @@ def record_loop(
         _sent_action = robot.send_action(robot_action_to_send)
 
         # Write to dataset (only on real policy frames, not interpolated-only iterations)
-        if dataset is not None and is_record_frame:
+        if dataset is not None and record_frames and is_record_frame:
             action_frame = build_dataset_frame(dataset.features, action_values, prefix=ACTION)
             frame = {**observation_frame, **action_frame, "task": single_task}
             dataset.add_frame(frame)
@@ -559,11 +624,6 @@ def record_loop(
         dt_s = time.perf_counter() - start_loop_t
 
         sleep_time_s: float = control_interval - dt_s
-        if sleep_time_s < 0:
-            logging.warning(
-                f"Record loop is running slower ({1 / dt_s:.1f} Hz) than the target FPS ({fps} Hz). Dataset frames might be dropped and robot control might be unstable. Common causes are: 1) Camera FPS not keeping up 2) Policy inference taking too long 3) CPU starvation"
-            )
-
         precise_sleep(max(sleep_time_s, 0.0))
 
         timestamp = time.perf_counter() - start_episode_t
@@ -588,7 +648,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             raise ValueError(
                 "Keyboard UR5e recording executes in EEF mode. Use `--robot.action_mode=eef`."
             )
-    elif isinstance(robot, UR5ePGI) and isinstance(teleop, (SpnavTeleop, QuestTeleop)):
+    elif isinstance(robot, UR5ePGI) and isinstance(teleop, SpnavTeleop | QuestTeleop):
         if robot.config.action_mode != teleop.config.action_mode:
             raise ValueError(
                 f"UR5e PGI and {teleop.name} action modes must match when recording with teleop "
@@ -720,6 +780,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
         robot.connect()
 
+        robot_start_poses = _capture_robot_start_poses(robot, teleop)
+        _initialize_relative_teleop_reference(teleop)
+        if robot_start_poses:
+            logging.info("Captured robot startup pose(s) for keyboard/SpaceMouse/Quest reset.")
+
         if isinstance(teleop, SpnavTeleop) and isinstance(robot, UR5ePGI):
             teleop._gripper_target = 1.0
             if robot.config.has_gripper and robot._gripper is not None:
@@ -752,41 +817,70 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             target_episode_count = initial_episode_count + cfg.dataset.num_episodes - 1
             recorded_episodes = 0
             if cfg.manual_episode_control:
-                pending_episode = False
+                policy_only_eval = policy is not None and teleop is None
+                waiting_policy = None if policy_only_eval else policy
+                waiting_preprocessor = None if policy_only_eval else preprocessor
+                waiting_postprocessor = None if policy_only_eval else postprocessor
+                manual_mode_message = (
+                    "Manual eval mode. Press c to start policy/control and recording, "
+                    "s to stop and save, backspace to discard immediately."
+                    if policy_only_eval
+                    else "Manual episode mode. Teleoperation/policy control is always active. Press c to start recording, "
+                    "s to stop and save, backspace to discard immediately."
+                )
                 log_say(
-                    "Manual episode mode. Press c to start, s to stop, backspace to discard.", cfg.play_sounds
+                    manual_mode_message,
+                    cfg.play_sounds,
                 )
 
                 while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
+                    # During policy-only evaluation, wait for an explicit episode start
+                    # before running policy inference. For teleoperation/data collection,
+                    # keep the original behavior: control remains active while c only
+                    # gates dataset writes.
+                    record_loop(
+                        robot=robot,
+                        events=events,
+                        fps=cfg.dataset.fps,
+                        teleop_action_processor=teleop_action_processor,
+                        robot_action_processor=robot_action_processor,
+                        robot_observation_processor=robot_observation_processor,
+                        teleop=teleop,
+                        policy=waiting_policy,
+                        preprocessor=waiting_preprocessor,
+                        postprocessor=waiting_postprocessor,
+                        dataset=dataset,
+                        control_time_s=None,
+                        single_task=cfg.dataset.single_task,
+                        display_data=cfg.display_data,
+                        interpolator=interpolator,
+                        display_compressed_images=display_compressed_images,
+                        manual_episode_control=True,
+                        wait_for_episode_start=True,
+                        record_frames=False,
+                        quiet_no_action=policy_only_eval,
+                    )
+
+                    if events["stop_recording"]:
+                        break
                     if events["delete_last_episode"]:
                         events["delete_last_episode"] = False
                         events["exit_early"] = False
                         events["stop_episode"] = False
-                        if pending_episode and dataset.has_pending_frames():
-                            dataset.clear_episode_buffer()
-                            pending_episode = False
-                            log_say("Discarded the last stopped episode", cfg.play_sounds)
-                        else:
-                            logging.info("No stopped episode is waiting to be discarded.")
+                        logging.info("No episode is recording; saved episodes cannot be deleted with backspace.")
+                        continue
+
+                    if events["stop_episode"]:
+                        events["stop_episode"] = False
+                        events["exit_early"] = False
+                        logging.info("No episode is recording; `s` has no effect.")
+                        continue
 
                     if not events["start_episode"]:
-                        if events["move_home"]:
-                            events["move_home"] = False
-                            if isinstance(robot, UR5ePGI):
-                                logging.info("Moving UR5e to the configured home TCP pose.")
-                                robot.move_to_tcp_pose(UR5E_PGI_HOME_TCP_POSE, gripper_target=1.0)
-
-                        precise_sleep(0.05)
+                        events["exit_early"] = False
                         continue
 
                     events["start_episode"] = False
-
-                    if pending_episode and dataset.has_pending_frames():
-                        dataset.save_episode()
-                        recorded_episodes += 1
-                        pending_episode = False
-                        if recorded_episodes >= cfg.dataset.num_episodes:
-                            break
 
                     _print_episode_banner(initial_episode_count + recorded_episodes, target_episode_count)
                     log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
@@ -810,24 +904,34 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         manual_episode_control=True,
                     )
 
-                    if dataset.has_pending_frames():
-                        pending_episode = True
-                        if events["delete_last_episode"]:
-                            events["delete_last_episode"] = False
-                            events["exit_early"] = False
-                            events["stop_episode"] = False
-                            events["start_episode"] = False
-                            dataset.clear_episode_buffer()
-                            pending_episode = False
-                            log_say("Discarded the current episode", cfg.play_sounds)
-                        else:
-                            log_say(
-                                "Episode stopped. Press c to save and start next, backspace to discard.",
-                                cfg.play_sounds,
-                            )
+                    discard_requested = events["delete_last_episode"]
+                    save_requested = events["stop_episode"] and not events["stop_recording"]
+                    events["delete_last_episode"] = False
+                    events["exit_early"] = False
+                    events["stop_episode"] = False
+                    events["start_episode"] = False
 
-                if pending_episode and dataset.has_pending_frames() and not events["delete_last_episode"]:
-                    dataset.save_episode()
+                    if dataset.has_pending_frames():
+                        if discard_requested or not save_requested:
+                            dataset.clear_episode_buffer()
+                            if discard_requested:
+                                log_say("Discarded the current episode", cfg.play_sounds)
+                            else:
+                                log_say("Discarded the uncommitted episode", cfg.play_sounds)
+                        else:
+                            dataset.save_episode()
+                            recorded_episodes += 1
+                            log_say("Episode saved. It can no longer be deleted with backspace.", cfg.play_sounds)
+                            if robot_start_poses:
+                                _move_robot_to_start_poses(robot, teleop, robot_start_poses)
+
+                    # Discarding an in-progress demonstration should reset the
+                    # physical scene in the same way as saving one. This also
+                    # resets the SpaceMouse/Quest relative-pose reference after
+                    # the arm reaches its startup pose. GELLO has no captured
+                    # startup pose and therefore remains unaffected.
+                    if discard_requested and robot_start_poses:
+                        _move_robot_to_start_poses(robot, teleop, robot_start_poses)
             else:
                 while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
                     log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
@@ -892,11 +996,12 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
         if not is_headless() and listener:
             listener.stop()
+            listener.join(timeout=2.0)
 
         if cfg.dataset.push_to_hub:
             dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
 
-        log_say("Exiting", cfg.play_sounds)
+        log_say("Exiting", cfg.play_sounds, blocking=True)
     return dataset
 
 

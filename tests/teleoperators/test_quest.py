@@ -28,11 +28,15 @@ TEST_CALIBRATION_DIR = Path("/tmp/lerobot-test-calibration/quest")
 class _FakeReader:
     def __init__(self, packets):
         self.packets = list(packets)
+        self.stopped = False
 
     def get_transformations_and_buttons(self):
         if len(self.packets) == 1:
             return self.packets[0]
         return self.packets.pop(0)
+
+    def stop(self):
+        self.stopped = True
 
 
 class _FakeReceive:
@@ -55,12 +59,20 @@ class _FakeControl:
     def __init__(self, solutions):
         self.solutions = list(solutions)
         self.requests = []
+        self.servo_stopped = False
+        self.script_stopped = False
 
     def getInverseKinematics(self, target_tcp, *args):  # noqa: N802
         self.requests.append((target_tcp, args))
         if len(self.solutions) == 1:
             return self.solutions[0]
         return self.solutions.pop(0)
+
+    def servoStop(self):  # noqa: N802
+        self.servo_stopped = True
+
+    def stopScript(self):  # noqa: N802
+        self.script_stopped = True
 
 
 def _quest_pose(position, rotation=None):
@@ -183,8 +195,8 @@ def test_quest_pose_mapping_matches_policyconsensus_formula():
 
 def test_quest_trigger_gates_motion_and_empty_ik_keeps_last_joint_target():
     packets = [
-        ({"r": _quest_pose([0.0, 0.0, 0.0])}, {"rightTrig": (1.0,)}),
-        ({"r": _quest_pose([0.1, 0.0, 0.0])}, {"rightTrig": (1.0,)}),
+        ({"r": _quest_pose([0.0, 0.0, 0.0])}, {"rightGrip": (1.0,), "rightTrig": (0.0,)}),
+        ({"r": _quest_pose([0.1, 0.0, 0.0])}, {"rightGrip": (1.0,), "rightTrig": (0.0,)}),
     ]
     teleop = _connect_fake(
         QuestTeleop(QuestTeleopConfig(robot_ip="192.168.0.10", calibration_dir=TEST_CALIBRATION_DIR)),
@@ -201,17 +213,102 @@ def test_quest_trigger_gates_motion_and_empty_ik_keeps_last_joint_target():
     assert teleop._arms[0].fallback_used
 
 
-def test_quest_gripper_buttons_are_mapped_like_policyconsensus():
+def test_quest_front_trigger_controls_gripper_proportionally():
     teleop = _connect_fake(
         QuestTeleop(QuestTeleopConfig(robot_ip="192.168.0.10", calibration_dir=TEST_CALIBRATION_DIR)),
         [
-            ({}, {"rightTrig": (0.0,), "A": True}),
-            ({}, {"rightTrig": (0.0,), "B": True}),
+            ({}, {"rightGrip": (0.0,), "rightTrig": (0.0,)}),
+            ({}, {"rightGrip": (0.0,), "rightTrig": (0.35,)}),
+            ({}, {"rightGrip": (0.0,), "rightTrig": (1.0,)}),
         ],
     )
 
-    closed_action = teleop.get_action()
     opened_action = teleop.get_action()
+    partially_closed_action = teleop.get_action()
+    closed_action = teleop.get_action()
 
-    assert closed_action["gripper.pos"] == 0.0
     assert opened_action["gripper.pos"] == 1.0
+    assert np.isclose(partially_closed_action["gripper.pos"], 0.65)
+    assert closed_action["gripper.pos"] == 0.0
+
+
+def test_quest_front_trigger_does_not_enable_arm_motion():
+    teleop = _connect_fake(
+        QuestTeleop(QuestTeleopConfig(robot_ip="192.168.0.10", calibration_dir=TEST_CALIBRATION_DIR)),
+        [({"r": _quest_pose([0.2, 0.0, 0.0])}, {"rightGrip": (0.0,), "rightTrig": (1.0,)})],
+    )
+
+    action = teleop.get_action()
+
+    assert action["shoulder_pan.pos"] == 1.0
+    assert action["gripper.pos"] == 0.0
+    assert not teleop._arms[0].control_active
+
+
+def test_bimanual_quest_front_triggers_control_their_own_grippers():
+    teleop = _connect_fake(
+        QuestTeleop(
+            QuestTeleopConfig(
+                bimanual=True,
+                left_robot_ip="192.168.0.10",
+                right_robot_ip="192.168.0.11",
+                calibration_dir=TEST_CALIBRATION_DIR,
+            )
+        ),
+        [
+            (
+                {},
+                {
+                    "leftGrip": (0.0,),
+                    "rightGrip": (0.0,),
+                    "leftTrig": (0.25,),
+                    "rightTrig": (0.8,),
+                },
+            )
+        ],
+    )
+
+    action = teleop.get_action()
+
+    assert np.isclose(action["left_gripper.pos"], 0.75)
+    assert np.isclose(action["right_gripper.pos"], 0.2)
+
+
+def test_quest_episode_reference_uses_current_robot_state():
+    teleop = _connect_fake(
+        QuestTeleop(QuestTeleopConfig(robot_ip="192.168.0.10", calibration_dir=TEST_CALIBRATION_DIR)),
+        [({}, {})],
+    )
+    arm = teleop._arms[0]
+    arm.control_active = True
+    arm.reference_quest_pose = _quest_pose([1.0, 2.0, 3.0])
+    arm.last_target_tcp = np.full(7, 99.0)
+    arm.last_joint_action = np.full(7, 99.0)
+    arm.rtde_receive = _FakeReceive(
+        tcp=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        joints=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+    )
+
+    teleop.reset_reference_from_robot()
+
+    assert not arm.control_active
+    assert arm.reference_quest_pose is None
+    np.testing.assert_allclose(arm.last_target_tcp[:6], [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    np.testing.assert_allclose(arm.last_joint_action[:6], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+
+def test_quest_disconnect_stops_reader_and_rtde_session():
+    teleop = _connect_fake(
+        QuestTeleop(QuestTeleopConfig(robot_ip="192.168.0.10", calibration_dir=TEST_CALIBRATION_DIR)),
+        [({}, {})],
+    )
+    reader = teleop._oculus_reader
+    control = teleop._arms[0].rtde_control
+
+    teleop.disconnect()
+
+    assert reader.stopped
+    assert control.servo_stopped
+    assert control.script_stopped
+    assert not teleop.is_connected
+    assert teleop._oculus_reader is None

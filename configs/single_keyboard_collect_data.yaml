@@ -1,0 +1,34 @@
+robot:
+  type: ur5e_pgi
+  action_mode: eef
+  robot_ip: 192.168.1.5
+  gripper_ip: 192.168.1.7
+  gripper_port: 8887
+  cameras:
+    global:
+      type: opencv
+      index_or_path: /dev/video18
+      width: 640
+      height: 480
+      fps: 30
+    wrist:
+      type: intelrealsense
+      serial_number_or_name: "939622075456"
+      width: 640
+      height: 480
+      fps: 30
+
+teleop:
+  type: keyboard_ur5e
+
+dataset:
+  repo_id: yechen/ur5e_pgi_keyboard
+  root: data/ur5e_pgi_keyboard
+  num_episodes: 30
+  fps: 20
+  single_task: pick up the target object and place it in the target area
+  push_to_hub: false
+
+manual_episode_control: true
+# resume: true
+display_data: true

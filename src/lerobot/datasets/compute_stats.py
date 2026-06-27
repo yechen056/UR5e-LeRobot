@@ -57,6 +57,12 @@ class RunningQuantileStats:
             batch: An array where all dimensions except the last are batch dimensions.
         """
         batch = batch.reshape(-1, batch.shape[-1])
+        # Accumulate in float64. In particular, squaring uint8 image pixels in
+        # their original dtype overflows (for example, 255**2 becomes 1), which
+        # made the computed variance negative and therefore clamped every image
+        # channel's standard deviation to zero.
+        if batch.dtype != np.float64:
+            batch = batch.astype(np.float64)
         num_elements, vector_length = batch.shape
 
         if self._count == 0:

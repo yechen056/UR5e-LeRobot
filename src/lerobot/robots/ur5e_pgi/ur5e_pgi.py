@@ -211,7 +211,7 @@ class UR5ePGI(Robot):
         assert self._rtde_receive is not None
 
         obs: dict[str, Any] = {}
-        joints = np.asarray(self._rtde_receive.getActualQ(), dtype=np.float32)
+        joints = self.get_joint_positions().astype(np.float32)
         if self.config.has_gripper:
             joints = np.append(joints, np.float32(self._read_gripper_position()))
 
@@ -222,6 +222,15 @@ class UR5ePGI(Robot):
             obs[camera_name] = camera.read_latest()
 
         return obs
+
+    @check_if_not_connected
+    def get_joint_positions(self) -> np.ndarray:
+        """Return the six current UR5e joint positions without reading cameras or the gripper."""
+        assert self._rtde_receive is not None
+        joints = np.asarray(self._rtde_receive.getActualQ(), dtype=np.float64)
+        if joints.shape != (6,) or not np.all(np.isfinite(joints)):
+            raise RuntimeError(f"Expected 6 finite UR5e joint positions, got {joints!r}.")
+        return joints
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
@@ -293,9 +302,12 @@ class UR5ePGI(Robot):
             except Exception:
                 logger.exception("Failed to stop UR RTDE script cleanly.")
 
-        if self._owns_rtde_session:
-            self._rtde_control = None
-            self._rtde_receive = None
+        # Always release this robot object's references. When the RTDE session
+        # is borrowed from a teleoperator, the owner still holds it and is
+        # responsible for stopping it; retaining duplicate references here can
+        # keep native RTDE resources alive until interpreter shutdown.
+        self._rtde_control = None
+        self._rtde_receive = None
         self._is_connected = False
         self._owns_rtde_session = True
 

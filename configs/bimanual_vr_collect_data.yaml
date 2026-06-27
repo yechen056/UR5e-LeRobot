@@ -1,0 +1,52 @@
+robot:
+  type: bi_ur5e_pgi
+  left_arm_config:
+    action_mode: joint
+    robot_ip: 192.168.1.3
+    gripper_ip: 192.168.1.8
+    gripper_port: 8888
+    cameras:
+      wrist:
+        type: intelrealsense
+        serial_number_or_name: "243722070241"
+        width: 640
+        height: 480
+        fps: 30
+      global:
+        type: opencv
+        index_or_path: /dev/video18
+        width: 640
+        height: 480
+        fps: 30
+  right_arm_config:
+    action_mode: joint
+    robot_ip: 192.168.1.5
+    gripper_ip: 192.168.1.7
+    gripper_port: 8887
+    cameras:
+      wrist:
+        type: intelrealsense
+        serial_number_or_name: "939622075456"
+        width: 640
+        height: 480
+        fps: 30
+
+teleop:
+  type: quest
+  bimanual: true
+  left_robot_ip: 192.168.1.3
+  right_robot_ip: 192.168.1.5
+  action_mode: joint
+
+dataset:
+  repo_id: FANYECHEN/ur5e-bimanual-vr
+  root: data/ur5e-bimanual-vr
+  num_episodes: 50
+  fps: 30
+  single_task: Place the banana and the red pepper into the orange tray.
+  streaming_encoding: true
+  push_to_hub: false
+
+manual_episode_control: true
+# resume: true
+display_data: false

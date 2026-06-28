@@ -38,12 +38,13 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 > - eef-space policy -> `--robot.action_mode=eef`
 
 > [!NOTE]
-> We have validated and tuned hyperparameters on this hardware stack for three policies: `ACT`, `Diffusion Policy`, `VQ-BeT`, `MultiTaskDiT`, `pi0`, and `pi05`.
+> We have validated and tuned hyperparameters on this hardware stack for five policies: `ACT`, `Diffusion Policy`, `VQ-BeT`, `MultiTaskDiT`, `pi0`, and `pi05`.
 > We will continue to publish tested training commands and recommended hyperparameters for additional policies in future updates.
 
 ## 📢 Update
 
-- **2026/06/27**, Updated the practical install flow for PI0/PI05, PEFT, MultiTaskDiT, RealSense, Quest, SpaceMouse, and UR RTDE; reorganized teleoperation, data collection, evaluation, and policy-specific training examples for single-arm and bimanual UR5e workflows.
+- **2026/06/28**, Extended the optional data replay support for validating collected demonstrations before policy training.
+- **2026/06/27**, Updated the data collection pipeline, resolved environment dependency issues, and expanded the training and teleoperation examples with support for more policy configurations in single-arm and bimanual UR5e.
 - **2026/04/13**, Added keyboard teleoperation support and a keyboard-based data collection branch.
 - **2026/04/12**, We released the **UR5e-LeRobot** project.
 
@@ -253,6 +254,21 @@ lerobot-record \
 - `S`: stop recording current episode
 - `Backspace`: delete the previous episode
 - `Esc`: exit the program
+
+# ▶️ Dataset Replay (Optional)
+
+```bash
+bash scripts/replay_data.sh /path/to/dataset 0
+```
+
+`/path/to/dataset` is the local dataset root, and `0` is the episode index to replay.
+
+Useful options:
+
+- `playback-speed 0.25`: Replay at quarter speed
+- `filter-static`: Remove exactly repeated action frames
+- `no-gripper`: Do not connect or command PGI grippers
+- `yes`: Skip the REPLAY confirmation
 
 # 🚀 Training
 

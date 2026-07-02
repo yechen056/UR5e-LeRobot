@@ -282,8 +282,6 @@ Useful options:
 
 # 🚀 Training
 
-Training commands are policy-specific. For `ACT`, `diffusion`, `vqbet`, and `multi_task_dit`, the same command works for single-arm or bimanual datasets because the observation and action dimensions are read from dataset metadata.
-
 Use the dataset pair that matches the data you collected:
 
 ```bash

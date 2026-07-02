@@ -393,7 +393,7 @@ lerobot-train \
   --wandb.enable=false
 ```
 
-- `Train  PI05`
+- `Train PI05`
   Required base model: `pi_models/pi05-base` (download from [pi05_base](https://huggingface.co/lerobot/pi05_base/tree/main)).
 
 ```bash

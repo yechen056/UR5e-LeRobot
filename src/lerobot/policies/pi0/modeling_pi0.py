@@ -1196,6 +1196,10 @@ class PI0Policy(PreTrainedPolicy):
             if img.dtype != torch.float32:
                 img = img.to(torch.float32)
 
+            if not torch.isfinite(img).all():
+                img = torch.nan_to_num(img, nan=0.0, posinf=1.0, neginf=0.0)
+            img = img.clamp(0.0, 1.0)
+
             # from openpi preprocess_observation_pytorch: Handle both [B, C, H, W] and [B, H, W, C] formats
             is_channels_first = img.shape[1] == 3  # Check if channels are in dimension 1
 

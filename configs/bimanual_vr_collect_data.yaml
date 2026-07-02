@@ -11,13 +11,13 @@ robot:
         serial_number_or_name: "243722070241"
         width: 640
         height: 480
-        fps: 30
+        fps: 20
       global:
         type: opencv
         index_or_path: /dev/video18
         width: 640
         height: 480
-        fps: 30
+        fps: 20
   right_arm_config:
     action_mode: joint
     robot_ip: 192.168.1.5
@@ -29,7 +29,7 @@ robot:
         serial_number_or_name: "939622075456"
         width: 640
         height: 480
-        fps: 30
+        fps: 20
 
 teleop:
   type: quest
@@ -42,7 +42,7 @@ dataset:
   repo_id: FANYECHEN/ur5e-bimanual-vr
   root: data/ur5e-bimanual-vr
   num_episodes: 50
-  fps: 30
+  fps: 20
   single_task: Place the banana and the red pepper into the orange tray.
   streaming_encoding: true
   push_to_hub: false

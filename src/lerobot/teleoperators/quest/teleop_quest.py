@@ -51,13 +51,16 @@ class _QuestArmState:
 
     @property
     def motion_trigger_key(self) -> str:
-        """Inner grip trigger used to engage arm motion."""
-        return "leftGrip" if self.hand == "l" else "rightGrip"
+        """Front index trigger used to engage arm motion."""
+        return "leftTrig" if self.hand == "l" else "rightTrig"
 
     @property
-    def gripper_trigger_key(self) -> str:
-        """Front index trigger used for proportional gripper closure."""
-        return "leftTrig" if self.hand == "l" else "rightTrig"
+    def gripper_close_button_key(self) -> str:
+        return "X" if self.hand == "l" else "A"
+
+    @property
+    def gripper_open_button_key(self) -> str:
+        return "Y" if self.hand == "l" else "B"
 
 
 class QuestTeleop(Teleoperator):
@@ -344,14 +347,14 @@ class QuestTeleop(Teleoperator):
     def _update_gripper_target(self, arm: _QuestArmState, button_data: dict[str, Any] | None) -> None:
         if not self.config.use_gripper or not button_data:
             return
-        if arm.gripper_trigger_key not in button_data:
-            return
 
-        # PGI convention: 1.0 is fully open and 0.0 is fully closed. The
-        # controller's front trigger reports 0.0 when released and 1.0 when
-        # fully pressed, so invert it to get a proportional gripper target.
-        trigger_value = self._button_axis_value(button_data[arm.gripper_trigger_key])
-        arm.gripper_target = 1.0 - float(np.clip(trigger_value, 0.0, 1.0))
+        # PGI convention: 1.0 is fully open and 0.0 is fully closed.
+        # Use discrete buttons for gripper control to avoid accidental changes
+        # from analog trigger noise.
+        if self._button_pressed(button_data.get(arm.gripper_close_button_key, False)):
+            arm.gripper_target = 0.0
+        elif self._button_pressed(button_data.get(arm.gripper_open_button_key, False)):
+            arm.gripper_target = 1.0
 
     def _motion_trigger_value(
         self, arm: _QuestArmState, button_data: dict[str, Any] | None
@@ -365,6 +368,12 @@ class QuestTeleop(Teleoperator):
         if isinstance(state, list | tuple | np.ndarray):
             return float(state[0]) if len(state) > 0 else 0.0
         return float(state)
+
+    @staticmethod
+    def _button_pressed(state: Any) -> bool:
+        if isinstance(state, list | tuple | np.ndarray):
+            return any(bool(value) for value in state)
+        return bool(state)
 
     def _format_action(
         self,

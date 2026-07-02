@@ -11,13 +11,13 @@ robot:
         serial_number_or_name: "243722070241"
         width: 640
         height: 480
-        fps: 30
+        fps: 20
       global:
         type: opencv
         index_or_path: /dev/video18
         width: 640
         height: 480
-        fps: 30
+        fps: 20
   right_arm_config:
     robot_ip: 192.168.1.5
     gripper_ip: 192.168.1.7
@@ -29,13 +29,13 @@ robot:
         serial_number_or_name: "939622075456"
         width: 640
         height: 480
-        fps: 30
+        fps: 20
 
 dataset:
   repo_id: FANYECHEN/eval_bimanual
   root: data/eval_bimanual
   num_episodes: 10
-  fps: 30
+  fps: 20
   single_task: Place the banana and the red pepper into the orange tray.
   push_to_hub: false
 

@@ -10,13 +10,13 @@ robot:
       index_or_path: /dev/video18
       width: 640
       height: 480
-      fps: 30
+      fps: 20
     wrist:
       type: intelrealsense
       serial_number_or_name: "939622075456"
       width: 640
       height: 480
-      fps: 30
+      fps: 20
 
 teleop:
   type: quest
@@ -27,7 +27,7 @@ dataset:
   repo_id: FANYECHEN/ur5e-single-vr
   root: data/ur5e-single-vr
   num_episodes: 50
-  fps: 30
+  fps: 20
   single_task: Place the banana and the red pepper into the orange tray.
   streaming_encoding: true
   push_to_hub: false

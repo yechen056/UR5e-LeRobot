@@ -10,19 +10,19 @@ robot:
       index_or_path: /dev/video18
       width: 640
       height: 480
-      fps: 30
+      fps: 20
     wrist:
       type: intelrealsense
       serial_number_or_name: "939622075456"
       width: 640
       height: 480
-      fps: 30
+      fps: 20
 
 dataset:
   repo_id: FANYECHEN/eval_single
   root: data/eval_single
   num_episodes: 10
-  fps: 30
+  fps: 20
   single_task: Place the banana and the red pepper into the orange tray.
   push_to_hub: false
 

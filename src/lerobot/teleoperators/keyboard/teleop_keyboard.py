@@ -345,13 +345,13 @@ class KeyboardUR5eTeleop(KeyboardTeleop):
         step = float(self.config.translation_step)
 
         if self.current_pressed.get(keyboard.Key.left, False):
-            delta_x += step
-        if self.current_pressed.get(keyboard.Key.right, False):
             delta_x -= step
+        if self.current_pressed.get(keyboard.Key.right, False):
+            delta_x += step
         if self.current_pressed.get(keyboard.Key.up, False):
-            delta_y -= step
-        if self.current_pressed.get(keyboard.Key.down, False):
             delta_y += step
+        if self.current_pressed.get(keyboard.Key.down, False):
+            delta_y -= step
         if self.current_pressed.get(keyboard.Key.shift, False):
             delta_z -= step
         if self.current_pressed.get(keyboard.Key.shift_r, False):
@@ -359,9 +359,11 @@ class KeyboardUR5eTeleop(KeyboardTeleop):
 
         if self.config.use_gripper:
             if self.current_pressed.get(keyboard.Key.ctrl_l, False) or self.current_pressed.get(keyboard.Key.ctrl, False):
-                gripper_delta -= float(self.config.gripper_step)
-            if self.current_pressed.get(keyboard.Key.ctrl_r, False):
-                gripper_delta += float(self.config.gripper_step)
+                gripper_pos = 0.0
+            elif self.current_pressed.get(keyboard.Key.ctrl_r, False):
+                gripper_pos = 1.0
+            else:
+                gripper_pos = None
 
         action = {
             "delta_x": delta_x,
@@ -370,6 +372,8 @@ class KeyboardUR5eTeleop(KeyboardTeleop):
         }
         if self.config.use_gripper:
             action["gripper_delta"] = gripper_delta
+            if gripper_pos is not None:
+                action["gripper_pos"] = gripper_pos
         return action
 
 

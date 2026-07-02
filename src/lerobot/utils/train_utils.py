@@ -107,7 +107,59 @@ def save_checkpoint(
         preprocessor.save_pretrained(pretrained_dir)
     if postprocessor is not None:
         postprocessor.save_pretrained(pretrained_dir)
+    _repair_peft_base_model_path(checkpoint_dir, cfg)
     save_training_state(checkpoint_dir, step, optimizer, scheduler)
+
+
+def _repair_peft_base_model_path(checkpoint_dir: Path, cfg: TrainPipelineConfig) -> None:
+    """Keep LoRA checkpoints pointing at the real frozen base model after resume."""
+    if cfg.peft is None:
+        return
+
+    pretrained_dir = checkpoint_dir / PRETRAINED_MODEL_DIR
+    adapter_config_path = pretrained_dir / "adapter_config.json"
+    if not adapter_config_path.exists():
+        return
+
+    candidates = []
+    if cfg.checkpoint_path is not None:
+        previous_adapter_config = cfg.checkpoint_path / PRETRAINED_MODEL_DIR / "adapter_config.json"
+        if previous_adapter_config.exists():
+            candidates.append(load_json(previous_adapter_config).get("base_model_name_or_path"))
+
+    if cfg.policy is not None and cfg.policy.pretrained_path is not None:
+        candidates.append(str(cfg.policy.pretrained_path))
+
+    base_model_path = None
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate_path = Path(candidate)
+        if (candidate_path / "model.safetensors").exists():
+            base_model_path = str(candidate_path)
+            break
+
+    if base_model_path is None:
+        return
+
+    adapter_config = load_json(adapter_config_path)
+    adapter_config["base_model_name_or_path"] = base_model_path
+    write_json(adapter_config, adapter_config_path)
+
+    policy_config_path = pretrained_dir / "config.json"
+    if policy_config_path.exists():
+        policy_config = load_json(policy_config_path)
+        if "pretrained_path" in policy_config:
+            policy_config["pretrained_path"] = base_model_path
+            write_json(policy_config, policy_config_path)
+
+    train_config_path = pretrained_dir / "train_config.json"
+    if train_config_path.exists():
+        train_config = load_json(train_config_path)
+        if isinstance(train_config.get("policy"), dict):
+            train_config["policy"]["pretrained_path"] = base_model_path
+        train_config["checkpoint_path"] = str(checkpoint_dir)
+        write_json(train_config, train_config_path)
 
 
 def save_training_state(

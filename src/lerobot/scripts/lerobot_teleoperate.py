@@ -135,7 +135,10 @@ def _bridge_keyboard_ur5e_action(robot: UR5ePGI, raw_action: RobotAction, obs: R
 
     gripper_target = float(obs.get("gripper.pos", 1.0))
     if robot.config.has_gripper:
-        gripper_target = min(max(gripper_target + float(raw_action.get("gripper_delta", 0.0)), 0.0), 1.0)
+        if "gripper_pos" in raw_action:
+            gripper_target = min(max(float(raw_action["gripper_pos"]), 0.0), 1.0)
+        else:
+            gripper_target = min(max(gripper_target + float(raw_action.get("gripper_delta", 0.0)), 0.0), 1.0)
 
     eef_action: RobotAction = {
         "tcp.x": float(target_tcp[0]),

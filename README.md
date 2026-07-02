@@ -369,11 +369,7 @@ lerobot-train \
   --wandb.enable=false
 ```
 
-## PI0 / PI05 Training
-
-PI-series policies need separate single-arm and bimanual commands. The single-arm PI0 command keeps the previously validated LoRA setting. For bimanual PI training, use `float32` first; previous bimanual `bfloat16` runs produced unstable checkpoints.
-
-- `Train Single-Arm PI0`
+- `Train PI0`
   Required base model: `pi_models/pi0-base` (download from [pi0_base](https://huggingface.co/lerobot/pi0_base/tree/main)).
 
 ```bash
@@ -382,8 +378,8 @@ lerobot-train \
   --dataset.root=${DATASET_ROOT} \
   --policy.type=pi0 \
   --policy.pretrained_path=/home/yechen/UR5e-LeRobot/pi_models/pi0-base \
-  --output_dir=./outputs/pi0_single \
-  --job_name=pi0_single \
+  --output_dir=./outputs/pi0 \
+  --job_name=pi0 \
   --policy.dtype=bfloat16 \
   --policy.compile_model=true \
   --policy.gradient_checkpointing=true \
@@ -397,31 +393,7 @@ lerobot-train \
   --wandb.enable=false
 ```
 
-- `Train Bimanual PI0`
-  Required base model: `pi_models/pi0-base` (download from [pi0_base](https://huggingface.co/lerobot/pi0_base/tree/main)).
-
-```bash
-lerobot-train \
-  --dataset.repo_id=${DATASET_REPO} \
-  --dataset.root=${DATASET_ROOT} \
-  --policy.type=pi0 \
-  --policy.pretrained_path=/home/yechen/UR5e-LeRobot/pi_models/pi0-base \
-  --output_dir=./outputs/pi0_bimanual_fp32_gc_b16 \
-  --job_name=pi0_bimanual \
-  --policy.dtype=float32 \
-  --policy.compile_model=true \
-  --policy.gradient_checkpointing=true \
-  --policy.device=cuda \
-  --policy.push_to_hub=false \
-  --steps=30000 \
-  --batch_size=16 \
-  --save_freq=10000 \
-  --peft.method_type=LORA \
-  --peft.r=32 \
-  --wandb.enable=false
-```
-
-- `Train Single-Arm PI05`
+- `Train  PI05`
   Required base model: `pi_models/pi05-base` (download from [pi05_base](https://huggingface.co/lerobot/pi05_base/tree/main)).
 
 ```bash
@@ -430,8 +402,8 @@ lerobot-train \
   --dataset.root=${DATASET_ROOT} \
   --policy.type=pi05 \
   --policy.pretrained_path=/home/yechen/UR5e-LeRobot/pi_models/pi05-base \
-  --output_dir=./outputs/pi05_single \
-  --job_name=pi05_single \
+  --output_dir=./outputs/pi05 \
+  --job_name=pi05 \
   --policy.dtype=bfloat16 \
   --policy.compile_model=true \
   --policy.gradient_checkpointing=true \
@@ -445,34 +417,7 @@ lerobot-train \
   --wandb.enable=false
 ```
 
-- `Train Bimanual PI05`
-  Required base model: `pi_models/pi05-base` (download from [pi05_base](https://huggingface.co/lerobot/pi05_base/tree/main)).
-
-```bash
-lerobot-train \
-  --dataset.repo_id=${DATASET_REPO} \
-  --dataset.root=${DATASET_ROOT} \
-  --policy.type=pi05 \
-  --policy.pretrained_path=/home/yechen/UR5e-LeRobot/pi_models/pi05-base \
-  --output_dir=./outputs/pi05_bimanual \
-  --job_name=pi05_bimanual \
-  --policy.dtype=float32 \
-  --policy.compile_model=true \
-  --policy.gradient_checkpointing=true \
-  --policy.device=cuda \
-  --policy.push_to_hub=false \
-  --steps=30000 \
-  --batch_size=8 \
-  --save_freq=10000 \
-  --peft.method_type=LORA \
-  --peft.r=32 \
-  --wandb.enable=false
-```
-
 # 🤖 Evaluation
-
-To evaluate trained checkpoints on the real robot, use the prepared evaluation configs and pass the policy checkpoint with `--policy.path`.
-Keep evaluation datasets separated by policy so results, videos, and success/failure episodes do not get mixed.
 
 ## Single-Arm Evaluation
 

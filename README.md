@@ -41,6 +41,16 @@ We focus on an end-to-end workflow for real hardware, from teleoperation to depl
 > We have validated and tuned hyperparameters on this hardware stack for five policies: `ACT`, `Diffusion Policy`, `VQ-BeT`, `MultiTaskDiT`, `pi0`, and `pi05`.
 > We will continue to publish tested training commands and recommended hyperparameters for additional policies in future updates.
 
+## 🖥️ Real-World Demos
+
+<p align="center">
+  <img src="docs/teleop.gif" alt="Teleoperation demo">
+</p>
+
+<p align="center">
+  <img src="docs/baselines.gif" alt="Baseline policy demo">
+</p>
+
 ## 📢 Update
 
 - **2026/06/28**, Extended the optional data replay support for validating collected demonstrations before policy training.
